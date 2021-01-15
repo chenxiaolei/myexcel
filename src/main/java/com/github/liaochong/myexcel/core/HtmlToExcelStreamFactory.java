@@ -56,7 +56,7 @@ import java.util.zip.ZipOutputStream;
  * @author liaochong
  * @version 1.0
  */
-class HtmlToExcelStreamFactory extends AbstractExcelFactory {
+public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
 
     private static final int XLSX_MAX_ROW_COUNT = 1048576;
 

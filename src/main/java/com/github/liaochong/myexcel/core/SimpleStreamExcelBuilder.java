@@ -29,7 +29,7 @@ import java.util.function.Consumer;
  * @author liaochong
  * @version 1.0
  */
-interface SimpleStreamExcelBuilder<T> extends Closeable {
+public interface SimpleStreamExcelBuilder<T> extends Closeable {
 
     /**
      * 线程池设置

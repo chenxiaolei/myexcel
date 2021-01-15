@@ -37,7 +37,7 @@ import java.util.function.Supplier;
  * @author liaochong
  * @version 1.0
  */
-abstract class AbstractReadHandler<T> {
+public abstract class AbstractReadHandler<T> {
 
     private Map<Integer, Field> fieldMap;
 

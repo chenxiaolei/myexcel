@@ -26,7 +26,7 @@ import java.util.List;
  * @author liaochong
  * @version 1.0
  */
-class XSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements XSSFSheetXMLHandler.SheetContentsHandler {
+public class XSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements XSSFSheetXMLHandler.SheetContentsHandler {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(XSSFSaxReadHandler.class);
     private int count;

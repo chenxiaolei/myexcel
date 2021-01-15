@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
  * @author liaochong
  * @version 1.0
  */
-class CsvReadHandler<T> extends AbstractReadHandler<T> {
+public class CsvReadHandler<T> extends AbstractReadHandler<T> {
 
     private static final Pattern PATTERN_SPLIT = Pattern.compile(",(?=([^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)");
 

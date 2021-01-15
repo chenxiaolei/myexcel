@@ -54,7 +54,7 @@ import java.util.Set;
  * @author liaochong
  * @version 1.0
  */
-class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSSFListener {
+public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSSFListener {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(HSSFSaxReadHandler.class);
     private Set<Integer> sheetIndexs;
