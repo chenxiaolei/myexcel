@@ -487,4 +487,8 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
             asyncAppendFutures.forEach(CompletableFuture::join);
         }
     }
+
+    public TemplateHandler getTemplateHandler(){
+        return templateHandler;
+    }
 }

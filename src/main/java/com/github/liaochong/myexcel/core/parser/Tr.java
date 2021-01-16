@@ -50,6 +50,11 @@ public class Tr {
      */
     private boolean fromTemplate;
 
+    /**
+     * 是否在thead中
+     */
+    private boolean thead;
+
     public Tr(int index, int height) {
         this.index = index;
         this.height = height;
@@ -107,5 +112,13 @@ public class Tr {
 
     public void setFromTemplate(boolean fromTemplate) {
         this.fromTemplate = fromTemplate;
+    }
+
+    public boolean isThead() {
+        return thead;
+    }
+
+    public void setThead(boolean thead) {
+        this.thead = thead;
     }
 }

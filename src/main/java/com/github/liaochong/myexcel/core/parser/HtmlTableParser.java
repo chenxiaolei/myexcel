@@ -31,13 +31,7 @@ import org.slf4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -150,6 +144,9 @@ public class HtmlTableParser {
             Tr tr = new Tr(index, TdUtil.getValue(height), true);
             // 行可见性
             tr.setVisibility(!Objects.equals(trStyleMap.get("visibility"), "hidden"));
+
+            tr.setThead(trElement.closest(HtmlTag.thead.name()) != null);
+
             this.parseTdOfTr(tr, trElement, trStyleMap, seizeMap);
             return tr;
         }).collect(Collectors.toCollection(LinkedList::new));
