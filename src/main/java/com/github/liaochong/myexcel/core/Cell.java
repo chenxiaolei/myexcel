@@ -15,8 +15,6 @@
 package com.github.liaochong.myexcel.core;
 
 
-import java.util.Objects;
-
 /**
  * excel单元格
  *
@@ -44,14 +42,30 @@ public class Cell {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Cell cell = (Cell) o;
-        return rowNum == cell.rowNum && colNum == cell.colNum;
+        if (o == this) {
+            return true;
+        } else if (!(o instanceof Cell)) {
+            return false;
+        } else {
+            Cell other = (Cell) o;
+            if (!other.canEqual(this)) {
+                return false;
+            } else if (this.getRowNum() != other.getRowNum()) {
+                return false;
+            } else {
+                return this.getColNum() == other.getColNum();
+            }
+        }
+    }
+
+    private boolean canEqual(Object other) {
+        return other instanceof Cell;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(rowNum, colNum);
+        int result = 59 + this.getRowNum();
+        result = result * 59 + this.getColNum();
+        return result;
     }
 }

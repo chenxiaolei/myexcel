@@ -14,9 +14,9 @@
  */
 package com.github.liaochong.myexcel.core.converter.writer;
 
-import com.github.liaochong.myexcel.core.ConvertContext;
 import com.github.liaochong.myexcel.core.ExcelColumnMapping;
 import com.github.liaochong.myexcel.core.container.Pair;
+import com.github.liaochong.myexcel.core.converter.ConvertContext;
 import com.github.liaochong.myexcel.core.converter.WriteConverter;
 
 import java.lang.reflect.Field;
@@ -33,19 +33,19 @@ import java.text.DecimalFormat;
 public class BigDecimalWriteConverter implements WriteConverter {
 
     @Override
-    public boolean support(Field field, Object fieldVal, ConvertContext convertContext) {
-        return field.getType() == BigDecimal.class;
+    public boolean support(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
+        return fieldType == BigDecimal.class;
     }
 
     @Override
-    public Pair<Class, Object> convert(Field field, Object fieldVal, ConvertContext convertContext) {
-        if (!convertContext.isConvertCsv()) {
+    public Pair<Class, Object> convert(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
+        if (!convertContext.isConvertCsv) {
             return Pair.of(Double.class, ((BigDecimal) fieldVal).toPlainString());
         }
-        ExcelColumnMapping excelColumnMapping = convertContext.getExcelColumnMappingMap().get(field);
-        String format = convertContext.getConfiguration().getDecimalFormat();
-        if (excelColumnMapping != null && !excelColumnMapping.getFormat().isEmpty()) {
-            format = excelColumnMapping.getFormat();
+        ExcelColumnMapping excelColumnMapping = convertContext.excelColumnMappingMap.get(field);
+        String format = convertContext.configuration.decimalFormat;
+        if (excelColumnMapping != null && !excelColumnMapping.format.isEmpty()) {
+            format = excelColumnMapping.format;
         }
         if (format.isEmpty()) {
             return Pair.of(Double.class, ((BigDecimal) fieldVal).toPlainString());

@@ -15,18 +15,23 @@
 package com.github.liaochong.myexcel.core;
 
 import com.github.liaochong.myexcel.core.cache.StringsCache;
+import com.github.liaochong.myexcel.core.context.Hyperlink;
+import com.github.liaochong.myexcel.core.context.ReadContext;
+import com.github.liaochong.myexcel.core.context.RowContext;
 import com.github.liaochong.myexcel.exception.ExcelReadException;
 import com.github.liaochong.myexcel.exception.SaxReadException;
 import com.github.liaochong.myexcel.exception.StopReadException;
+import com.github.liaochong.myexcel.utils.ReflectUtil;
+import com.github.liaochong.myexcel.utils.StringUtil;
 import com.github.liaochong.myexcel.utils.TempFileOperator;
-import org.apache.poi.ooxml.util.SAXHelper;
+import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.openxml4j.exceptions.OpenXML4JException;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.openxml4j.opc.PackageAccess;
+import org.apache.poi.openxml4j.opc.PackageRelationshipCollection;
 import org.apache.poi.poifs.filesystem.FileMagic;
-import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.util.XMLHelper;
 import org.apache.poi.xssf.eventusermodel.XSSFReader;
-import org.apache.poi.xssf.model.SharedStrings;
 import org.slf4j.Logger;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.InputSource;
@@ -41,9 +46,13 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -61,6 +70,10 @@ public class SaxExcelReader<T> {
 
     private static final int DEFAULT_SHEET_INDEX = 0;
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(SaxExcelReader.class);
+    /**
+     * 元数据
+     */
+    private WorkbookMetaData workbookMetaData;
 
     private final List<T> result = new LinkedList<>();
 
@@ -104,8 +117,19 @@ public class SaxExcelReader<T> {
         return this;
     }
 
+    @Deprecated
     public SaxExcelReader<T> charset(String charset) {
-        this.readConfig.charset = charset;
+        this.readConfig.csvCharset = charset;
+        return this;
+    }
+
+    public SaxExcelReader<T> csvCharset(String charset) {
+        this.readConfig.csvCharset = charset;
+        return this;
+    }
+
+    public SaxExcelReader<T> csvDelimiter(char delimiter) {
+        this.readConfig.csvDelimiter = delimiter;
         return this;
     }
 
@@ -119,14 +143,39 @@ public class SaxExcelReader<T> {
         return this;
     }
 
+    public SaxExcelReader<T> trimToNull() {
+        this.readConfig.trim = StringUtil::trimToNull;
+        return this;
+    }
+
     public SaxExcelReader<T> readAllSheet() {
         this.readConfig.readAllSheet = true;
+        return this;
+    }
+
+    public SaxExcelReader<T> ignoreBlankRow() {
+        this.readConfig.ignoreBlankRow = true;
+        return this;
+    }
+
+    public SaxExcelReader<T> stopReadingOnBlankRow() {
+        this.readConfig.stopReadingOnBlankRow = true;
         return this;
     }
 
     public SaxExcelReader<T> startSheet(BiConsumer<String, Integer> startSheetConsumer) {
         this.readConfig.startSheetConsumer = startSheetConsumer;
         return this;
+    }
+
+    public SaxExcelReader<T> detectedMerge() {
+        this.readConfig.detectedMerge = true;
+        return this;
+    }
+
+    public List<T> read(Path path) {
+        doRead(path.toFile());
+        return result;
     }
 
     public List<T> read(InputStream fileInputStream) {
@@ -149,6 +198,11 @@ public class SaxExcelReader<T> {
         doRead(file);
     }
 
+    public void readThen(Path path, Consumer<T> consumer) {
+        this.readConfig.consumer = consumer;
+        doRead(path.toFile());
+    }
+
     public void readThen(InputStream fileInputStream, BiConsumer<T, RowContext> contextConsumer) {
         this.readConfig.contextConsumer = contextConsumer;
         doRead(fileInputStream);
@@ -159,9 +213,9 @@ public class SaxExcelReader<T> {
         doRead(file);
     }
 
-    public void readThen(InputStream fileInputStream, Function<T, Boolean> function) {
-        this.readConfig.function = function;
-        doRead(fileInputStream);
+    public void readThen(Path path, BiConsumer<T, RowContext> contextConsumer) {
+        this.readConfig.contextConsumer = contextConsumer;
+        doRead(path.toFile());
     }
 
     public void readThen(File file, BiFunction<T, RowContext, Boolean> contextFunction) {
@@ -174,21 +228,62 @@ public class SaxExcelReader<T> {
         doRead(fileInputStream);
     }
 
+    public void readThen(Path path, BiFunction<T, RowContext, Boolean> contextFunction) {
+        this.readConfig.contextFunction = contextFunction;
+        doRead(path.toFile());
+    }
+
+    public void readThen(InputStream fileInputStream, Function<T, Boolean> function) {
+        this.readConfig.function = function;
+        doRead(fileInputStream);
+    }
+
     public void readThen(File file, Function<T, Boolean> function) {
         this.readConfig.function = function;
         doRead(file);
     }
 
+    public void readThen(Path path, Function<T, Boolean> function) {
+        this.readConfig.function = function;
+        doRead(path.toFile());
+    }
+
+    public static WorkbookMetaData getWorkbookMetaData(Path path) {
+        SaxExcelReader<Void> saxExcelReader = new SaxExcelReader<>(null);
+        saxExcelReader.doRead(path.toFile(), true);
+        return saxExcelReader.workbookMetaData;
+    }
+
+    public static WorkbookMetaData getWorkbookMetaData(InputStream fileInputStream) {
+        SaxExcelReader<Void> saxExcelReader = new SaxExcelReader<>(null);
+        saxExcelReader.doRead(fileInputStream, true);
+        return saxExcelReader.workbookMetaData;
+    }
+
+    public static WorkbookMetaData getWorkbookMetaData(File file) {
+        SaxExcelReader<Void> saxExcelReader = new SaxExcelReader<>(null);
+        saxExcelReader.doRead(file, true);
+        return saxExcelReader.workbookMetaData;
+    }
+
     private void doRead(InputStream fileInputStream) {
+        this.doRead(fileInputStream, false);
+    }
+
+    private void doRead(InputStream fileInputStream, boolean readMetaData) {
         Path path = TempFileOperator.convertToFile(fileInputStream);
         try {
-            doRead(path.toFile());
+            doRead(path.toFile(), readMetaData);
         } finally {
             TempFileOperator.deleteTempFile(path);
         }
     }
 
     private void doRead(File file) {
+        this.doRead(file, false);
+    }
+
+    private void doRead(File file, boolean readMetaData) {
         FileMagic fm;
         try (InputStream is = FileMagic.prepareToCheckMagic(new FileInputStream(file))) {
             fm = FileMagic.valueOf(is);
@@ -198,12 +293,15 @@ public class SaxExcelReader<T> {
         try {
             switch (fm) {
                 case OOXML:
-                    doReadXlsx(file);
+                    doReadXlsx(file, readMetaData);
                     break;
                 case OLE2:
-                    doReadXls(file);
+                    doReadXls(file, readMetaData);
                     break;
                 default:
+                    if (readMetaData) {
+                        throw new UnsupportedOperationException();
+                    }
                     doReadCsv(file);
             }
         } catch (Throwable e) {
@@ -211,9 +309,23 @@ public class SaxExcelReader<T> {
         }
     }
 
-    private void doReadXls(File file) {
+    private void doReadXls(File file, boolean readMetaData) {
         try {
-            new HSSFSaxReadHandler<>(file, result, readConfig).process();
+            if (readMetaData) {
+                workbookMetaData = new WorkbookMetaData();
+                new HSSFMetaDataSaxReadHandler(file, workbookMetaData).process();
+            } else {
+                HSSFPreReadHandler.HSSFPreData hssfPreData = null;
+                if (readConfig.detectedMerge || readConfig.detectedHyperlink()) {
+                    HSSFPreReadHandler hssfPreReadHandler = new HSSFPreReadHandler(file, readConfig);
+                    hssfPreReadHandler.process();
+                    hssfPreData = hssfPreReadHandler.getHssfPreData();
+                }
+                if (hssfPreData == null || hssfPreData.mergeCellIndexMapping == null) {
+                    readConfig.detectedMerge = false;
+                }
+                new HSSFSaxReadHandler<>(file, result, readConfig, hssfPreData).process();
+            }
         } catch (StopReadException e) {
             // do nothing
         } catch (IOException e) {
@@ -221,9 +333,13 @@ public class SaxExcelReader<T> {
         }
     }
 
-    private void doReadXlsx(File file) {
+    private void doReadXlsx(File file, boolean readMetaData) {
         try (OPCPackage p = OPCPackage.open(file, PackageAccess.READ)) {
-            process(p);
+            if (readMetaData) {
+                processMetaData(p);
+            } else {
+                process(p);
+            }
         } catch (StopReadException e) {
             // do nothing
         } catch (Exception e) {
@@ -249,109 +365,159 @@ public class SaxExcelReader<T> {
      */
     private void process(OPCPackage xlsxPackage) throws IOException, OpenXML4JException, SAXException {
         long startTime = System.currentTimeMillis();
+        Map<Integer, XSSFSheetPreXMLHandler.XSSFPreData> preDataIndexMapping = this.processPreData(xlsxPackage);
         StringsCache stringsCache = new StringsCache();
         try {
             ReadOnlySharedStringsTable strings = new ReadOnlySharedStringsTable(xlsxPackage, stringsCache);
-            XSSFReader xssfReader = new XSSFReader(xlsxPackage);
-            XSSFReader.SheetIterator iter = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
-            int index = 0;
-            if (readConfig.readAllSheet) {
-                while (iter.hasNext()) {
-                    try (InputStream stream = iter.next()) {
-                        readConfig.startSheetConsumer.accept(iter.getSheetName(), index);
-                        processSheet(strings, new XSSFSaxReadHandler<>(result, readConfig), stream);
-                    }
-                    ++index;
-                }
-            } else if (!readConfig.sheetNames.isEmpty()) {
-                while (iter.hasNext()) {
-                    try (InputStream stream = iter.next()) {
-                        if (readConfig.sheetNames.contains(iter.getSheetName())) {
-                            readConfig.startSheetConsumer.accept(iter.getSheetName(), index);
-                            processSheet(strings, new XSSFSaxReadHandler<>(result, readConfig), stream);
-                        }
-                        ++index;
-                    }
-                }
-            } else {
-                while (iter.hasNext()) {
-                    try (InputStream stream = iter.next()) {
-                        if (readConfig.sheetIndexs.contains(index)) {
-                            readConfig.startSheetConsumer.accept(iter.getSheetName(), index);
-                            processSheet(strings, new XSSFSaxReadHandler<>(result, readConfig), stream);
-                        }
-                        ++index;
-                    }
-                }
-            }
+            this.doReadSheet(xlsxPackage, xssfReadContext -> {
+                readConfig.startSheetConsumer.accept(xssfReadContext.sheetName, xssfReadContext.sheetIndex);
+                XSSFSheetPreXMLHandler.XSSFPreData xssfPreData = preDataIndexMapping.get(xssfReadContext.sheetIndex);
+                ContentHandler handler = new XSSFSheetXMLHandler(
+                        xssfPreData, strings, new XSSFSaxReadHandler<>(result, readConfig, xssfPreData));
+                processSheet(handler, xssfReadContext.inputStream);
+                preDataIndexMapping.remove(xssfReadContext.sheetIndex);
+            });
         } finally {
             stringsCache.clearAll();
         }
         log.info("Sax import takes {} ms", System.currentTimeMillis() - startTime);
     }
 
+    private Map<Integer, XSSFSheetPreXMLHandler.XSSFPreData> processPreData(OPCPackage xlsxPackage) throws IOException, OpenXML4JException {
+        if (!readConfig.detectedMerge && !readConfig.detectedHyperlink()) {
+            return Collections.emptyMap();
+        }
+        Map<Integer, XSSFSheetPreXMLHandler.XSSFPreData> preDataIndexMapping = new HashMap<>();
+        this.doReadSheet(xlsxPackage, xssfReadContext -> {
+            xssfReadContext.packageRelationshipCollection = Optional.ofNullable(xssfReadContext.sheetIterator.getSheetPart())
+                    .map(packagePart -> {
+                        try {
+                            return packagePart.getRelationships();
+                        } catch (InvalidFormatException e) {
+                            throw new SaxReadException("Get relationships failure.", e);
+                        }
+                    }).orElse(null);
+            XSSFSheetPreXMLHandler xssfSheetPreXMLHandler = new XSSFSheetPreXMLHandler(readConfig, xssfReadContext);
+            processSheet(xssfSheetPreXMLHandler, xssfReadContext.inputStream);
+            preDataIndexMapping.put(xssfReadContext.sheetIndex, xssfSheetPreXMLHandler.getXssfPreData());
+        });
+        if (preDataIndexMapping.isEmpty()) {
+            readConfig.detectedMerge = false;
+        }
+        return preDataIndexMapping;
+    }
+
+    private void processMetaData(OPCPackage xlsxPackage) throws IOException, OpenXML4JException {
+        workbookMetaData = new WorkbookMetaData();
+        readConfig.readAllSheet = true;
+        int lastIndex = this.doReadSheet(xlsxPackage, xssfReadContext -> {
+            SheetMetaData sheetMetaData = new SheetMetaData(xssfReadContext.sheetName, xssfReadContext.sheetIndex);
+            this.processSheet(new XSSFSheetMetaDataXMLHandler(sheetMetaData), xssfReadContext.inputStream);
+            // 设置元数据信息
+            workbookMetaData.getSheetMetaDataList().add(sheetMetaData);
+        });
+        if (lastIndex > -1) {
+            workbookMetaData.setSheetCount(lastIndex + 1);
+        }
+    }
+
+    private int doReadSheet(OPCPackage xlsxPackage, Consumer<XSSFReadContext> consumer) throws IOException, OpenXML4JException {
+        XSSFReader.SheetIterator iter = this.getSheetIterator(xlsxPackage);
+        Function<XSSFReadContext, Boolean> acceptFunction = this.getSheetAcceptFunction();
+        int index = -1;
+        while (iter.hasNext()) {
+            ++index;
+            try (InputStream stream = iter.next()) {
+                XSSFReadContext xssfReadContext = new XSSFReadContext(iter, stream, index, iter.getSheetName());
+                if (acceptFunction.apply(xssfReadContext)) {
+                    consumer.accept(xssfReadContext);
+                }
+            }
+        }
+        return index;
+    }
+
+    private XSSFReader.SheetIterator getSheetIterator(OPCPackage xlsxPackage) throws IOException, OpenXML4JException {
+        XSSFReader xssfReader = new XSSFReader(xlsxPackage);
+        return (XSSFReader.SheetIterator) xssfReader.getSheetsData();
+    }
+
+    private Function<XSSFReadContext, Boolean> getSheetAcceptFunction() {
+        Function<XSSFReadContext, Boolean> acceptFunction = xssfReadContext -> true;
+        if (readConfig.readAllSheet) {
+            acceptFunction = xssfReadContext -> true;
+        } else if (!readConfig.sheetNames.isEmpty()) {
+            acceptFunction = xssfReadContext -> readConfig.sheetNames.contains(xssfReadContext.sheetName);
+        } else if (!readConfig.sheetIndexs.isEmpty()) {
+            acceptFunction = xssfReadContext -> readConfig.sheetIndexs.contains(xssfReadContext.sheetIndex);
+        }
+        return acceptFunction;
+    }
+
     /**
      * Parses and shows the content of one sheet
      * using the specified styles and shared-strings tables.
      *
-     * @param strings          The table of strings that may be referenced by cells in the sheet
      * @param sheetInputStream The stream to read the sheet-data from.
-     * @throws java.io.IOException An IO exception from the parser,
-     *                             possibly from a byte stream or character stream
-     *                             supplied by the application.
-     * @throws SAXException        if parsing the XML data fails.
      */
     private void processSheet(
-            SharedStrings strings,
-            XSSFSheetXMLHandler.SheetContentsHandler sheetHandler,
-            InputStream sheetInputStream) throws IOException, SAXException {
-        DataFormatter formatter = new DataFormatter();
-        InputSource sheetSource = new InputSource(sheetInputStream);
+            ContentHandler handler,
+            InputStream sheetInputStream) {
         try {
-            XMLReader sheetParser = SAXHelper.newXMLReader();
-            ContentHandler handler = new XSSFSheetXMLHandler(
-                    null, null, strings, sheetHandler, formatter, false);
+            XMLReader sheetParser = XMLHelper.newXMLReader();
             sheetParser.setContentHandler(handler);
-            sheetParser.parse(sheetSource);
-        } catch (ParserConfigurationException e) {
+            sheetParser.parse(new InputSource(sheetInputStream));
+        } catch (ParserConfigurationException | IOException | SAXException e) {
             throw new RuntimeException("SAX parser appears to be broken - " + e.getMessage());
         }
     }
 
     public static final class ReadConfig<T> {
 
-        private Class<T> dataType;
+        public Class<T> dataType;
 
-        private Set<String> sheetNames = new HashSet<>();
+        public Set<String> sheetNames = new HashSet<>();
 
-        private Set<Integer> sheetIndexs = new HashSet<>();
+        public Set<Integer> sheetIndexs = new HashSet<>();
 
-        private Consumer<T> consumer;
+        public Consumer<T> consumer;
 
-        private BiConsumer<T, RowContext> contextConsumer;
+        public BiConsumer<T, RowContext> contextConsumer;
 
-        private Function<T, Boolean> function;
+        public Function<T, Boolean> function;
 
-        private BiFunction<T, RowContext, Boolean> contextFunction;
+        public BiFunction<T, RowContext, Boolean> contextFunction;
 
-        private Predicate<Row> rowFilter = row -> true;
+        public Predicate<Row> rowFilter = row -> true;
 
-        private Predicate<T> beanFilter = bean -> true;
+        public Predicate<T> beanFilter = bean -> true;
 
-        private BiFunction<Throwable, ReadContext, Boolean> exceptionFunction = (t, c) -> false;
+        public BiFunction<Throwable, ReadContext, Boolean> exceptionFunction = (t, c) -> false;
 
-        private String charset = "UTF-8";
+        public String csvCharset = "UTF-8";
 
-        private Function<String, String> trim = v -> {
+        public char csvDelimiter = ',';
+
+        public Function<String, String> trim = v -> {
             if (v == null) {
                 return v;
             }
             return v.trim();
         };
 
-        private boolean readAllSheet;
+        public boolean readAllSheet;
+        /**
+         * 是否忽略空白行，默认为否
+         */
+        public boolean ignoreBlankRow = false;
+        /**
+         * 是否在遇到空白行时停止读取
+         */
+        public boolean stopReadingOnBlankRow = false;
 
-        private BiConsumer<String, Integer> startSheetConsumer = (sheetName, sheetIndex) -> {
+        public boolean detectedMerge;
+
+        public BiConsumer<String, Integer> startSheetConsumer = (sheetName, sheetIndex) -> {
             log.info("Start read excel, sheet:{},index:{}", sheetName, sheetIndex);
         };
 
@@ -359,116 +525,28 @@ public class SaxExcelReader<T> {
             sheetIndexs.add(sheetIndex);
         }
 
-        public Class<T> getDataType() {
-            return this.dataType;
+        public boolean detectedHyperlink() {
+            if (dataType == Map.class) {
+                return false;
+            }
+            return ReflectUtil.getFieldDefinitionMapOfExcelColumn(dataType).values().stream().anyMatch(f -> f.getField().getType() == Hyperlink.class);
         }
+    }
 
-        public Set<String> getSheetNames() {
-            return this.sheetNames;
-        }
+    public static class XSSFReadContext {
 
-        public Set<Integer> getSheetIndexs() {
-            return this.sheetIndexs;
-        }
+        public XSSFReader.SheetIterator sheetIterator;
+        public InputStream inputStream;
+        public Integer sheetIndex;
+        public String sheetName;
 
-        public Consumer<T> getConsumer() {
-            return this.consumer;
-        }
+        public PackageRelationshipCollection packageRelationshipCollection;
 
-        public BiConsumer<T, RowContext> getContextConsumer() {
-            return this.contextConsumer;
-        }
-
-        public Function<T, Boolean> getFunction() {
-            return this.function;
-        }
-
-        public BiFunction<T, RowContext, Boolean> getContextFunction() {
-            return this.contextFunction;
-        }
-
-        public Predicate<Row> getRowFilter() {
-            return this.rowFilter;
-        }
-
-        public Predicate<T> getBeanFilter() {
-            return this.beanFilter;
-        }
-
-        public BiFunction<Throwable, ReadContext, Boolean> getExceptionFunction() {
-            return this.exceptionFunction;
-        }
-
-        public String getCharset() {
-            return this.charset;
-        }
-
-        public Function<String, String> getTrim() {
-            return this.trim;
-        }
-
-        public void setDataType(Class<T> dataType) {
-            this.dataType = dataType;
-        }
-
-        public void setSheetNames(Set<String> sheetNames) {
-            this.sheetNames = sheetNames;
-        }
-
-        public void setSheetIndexs(Set<Integer> sheetIndexs) {
-            this.sheetIndexs = sheetIndexs;
-        }
-
-        public void setConsumer(Consumer<T> consumer) {
-            this.consumer = consumer;
-        }
-
-        public void setContextConsumer(BiConsumer<T, RowContext> contextConsumer) {
-            this.contextConsumer = contextConsumer;
-        }
-
-        public void setFunction(Function<T, Boolean> function) {
-            this.function = function;
-        }
-
-        public void setContextFunction(BiFunction<T, RowContext, Boolean> contextFunction) {
-            this.contextFunction = contextFunction;
-        }
-
-        public void setRowFilter(Predicate<Row> rowFilter) {
-            this.rowFilter = rowFilter;
-        }
-
-        public void setBeanFilter(Predicate<T> beanFilter) {
-            this.beanFilter = beanFilter;
-        }
-
-        public void setExceptionFunction(BiFunction<Throwable, ReadContext, Boolean> exceptionFunction) {
-            this.exceptionFunction = exceptionFunction;
-        }
-
-        public void setCharset(String charset) {
-            this.charset = charset;
-        }
-
-        public void setTrim(Function<String, String> trim) {
-            this.trim = trim;
-        }
-
-        public boolean isReadAllSheet() {
-            return readAllSheet;
-        }
-
-        public void setReadAllSheet(boolean readAllSheet) {
-            this.readAllSheet = readAllSheet;
-        }
-
-        public BiConsumer<String, Integer> getStartSheetConsumer() {
-            return startSheetConsumer;
-        }
-
-        public void setStartSheetConsumer(BiConsumer<String, Integer> startSheetConsumer) {
-            this.startSheetConsumer = startSheetConsumer;
+        public XSSFReadContext(XSSFReader.SheetIterator sheetIterator, InputStream inputStream, Integer sheetIndex, String sheetName) {
+            this.sheetIterator = sheetIterator;
+            this.inputStream = inputStream;
+            this.sheetIndex = sheetIndex;
+            this.sheetName = sheetName;
         }
     }
 }

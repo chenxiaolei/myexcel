@@ -14,11 +14,11 @@
  */
 package com.github.liaochong.myexcel.core.converter.writer;
 
-import com.github.liaochong.myexcel.core.ConvertContext;
 import com.github.liaochong.myexcel.core.ExcelColumnMapping;
 import com.github.liaochong.myexcel.core.cache.Cache;
 import com.github.liaochong.myexcel.core.cache.WeakCache;
 import com.github.liaochong.myexcel.core.container.Pair;
+import com.github.liaochong.myexcel.core.converter.ConvertContext;
 import com.github.liaochong.myexcel.core.converter.WriteConverter;
 import com.github.liaochong.myexcel.utils.ReflectUtil;
 
@@ -26,7 +26,9 @@ import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.Temporal;
 import java.util.Date;
 
 /**
@@ -40,36 +42,33 @@ public class DateTimeWriteConverter implements WriteConverter {
     private static final WeakCache<String, ThreadLocal<SimpleDateFormat>> SIMPLE_DATE_FORMAT_WEAK_CACHE = new WeakCache<>();
 
     @Override
-    public boolean support(Field field, Object fieldVal, ConvertContext convertContext) {
-        return ReflectUtil.isDate(field.getType());
+    public boolean support(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
+        return ReflectUtil.isDate(fieldType);
     }
 
     @Override
-    public Pair<Class, Object> convert(Field field, Object fieldVal, ConvertContext convertContext) {
-        Class<?> fieldType = field.getType();
+    public Pair<Class, Object> convert(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
         // 时间格式化
-        String dateFormatPattern = getDateFormatPattern(convertContext, field);
+        String dateFormatPattern = getDateFormatPattern(convertContext, field, fieldType);
         if (fieldType == LocalDateTime.class) {
-            LocalDateTime localDateTime = (LocalDateTime) fieldVal;
-            DateTimeFormatter formatter = getDateTimeFormatter(dateFormatPattern);
-            return Pair.of(String.class, formatter.format(localDateTime));
+            return doConvertDate((LocalDateTime) fieldVal, dateFormatPattern);
         } else if (fieldType == LocalDate.class) {
-            LocalDate localDate = (LocalDate) fieldVal;
-            DateTimeFormatter formatter = getDateTimeFormatter(dateFormatPattern);
-            return Pair.of(String.class, formatter.format(localDate));
+            return doConvertDate((LocalDate) fieldVal, dateFormatPattern);
+        } else if (fieldType == LocalTime.class) {
+            return doConvertDate((LocalTime) fieldVal, dateFormatPattern);
         }
-        SimpleDateFormat simpleDateFormat = this.getSimpleDateFormat(dateFormatPattern);
+        SimpleDateFormat simpleDateFormat = getSimpleDateFormat(dateFormatPattern);
         return Pair.of(String.class, simpleDateFormat.format((Date) fieldVal));
     }
 
-    private String getDateFormatPattern(ConvertContext convertContext, Field field) {
-        ExcelColumnMapping mapping = convertContext.getExcelColumnMappingMap().get(field);
+    protected String getDateFormatPattern(ConvertContext convertContext, Field field, Class<?> fieldType) {
+        ExcelColumnMapping mapping = convertContext.excelColumnMappingMap.get(field);
         if (mapping == null) {
-            return field.getType() == LocalDate.class ? convertContext.getConfiguration().getDateFormat() : convertContext.getConfiguration().getDateTimeFormat();
+            return fieldType == LocalDate.class ? convertContext.configuration.dateFormat : fieldType == LocalTime.class ? convertContext.configuration.localTimeFormat : convertContext.configuration.dateTimeFormat;
         }
-        String dateFormatPattern = mapping.getFormat();
+        String dateFormatPattern = mapping.format;
         if (dateFormatPattern.isEmpty()) {
-            dateFormatPattern = field.getType() == LocalDate.class ? convertContext.getConfiguration().getDateFormat() : convertContext.getConfiguration().getDateTimeFormat();
+            dateFormatPattern = fieldType == LocalDate.class ? convertContext.configuration.dateFormat : fieldType == LocalTime.class ? convertContext.configuration.localTimeFormat : convertContext.configuration.dateTimeFormat;
         }
         return dateFormatPattern;
     }
@@ -80,7 +79,7 @@ public class DateTimeWriteConverter implements WriteConverter {
      * @param dateFormat 时间格式化
      * @return DateTimeFormatter
      */
-    private DateTimeFormatter getDateTimeFormatter(String dateFormat) {
+    protected static DateTimeFormatter getDateTimeFormatter(String dateFormat) {
         DateTimeFormatter formatter = DATETIME_FORMATTER_CONTAINER.get(dateFormat);
         if (formatter == null) {
             formatter = DateTimeFormatter.ofPattern(dateFormat);
@@ -89,12 +88,17 @@ public class DateTimeWriteConverter implements WriteConverter {
         return formatter;
     }
 
-    private SimpleDateFormat getSimpleDateFormat(String dateFormatPattern) {
+    private static SimpleDateFormat getSimpleDateFormat(String dateFormatPattern) {
         ThreadLocal<SimpleDateFormat> tl = SIMPLE_DATE_FORMAT_WEAK_CACHE.get(dateFormatPattern);
         if (tl == null) {
             tl = ThreadLocal.withInitial(() -> new SimpleDateFormat(dateFormatPattern));
             SIMPLE_DATE_FORMAT_WEAK_CACHE.cache(dateFormatPattern, tl);
         }
         return tl.get();
+    }
+
+    public static Pair<Class, Object> doConvertDate(Temporal v, String format) {
+        DateTimeFormatter formatter = DateTimeWriteConverter.getDateTimeFormatter(format);
+        return Pair.of(String.class, formatter.format(v));
     }
 }

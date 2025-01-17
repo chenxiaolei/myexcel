@@ -14,8 +14,8 @@
  */
 package com.github.liaochong.myexcel.core.converter.writer;
 
-import com.github.liaochong.myexcel.core.ConvertContext;
 import com.github.liaochong.myexcel.core.container.Pair;
+import com.github.liaochong.myexcel.core.converter.ConvertContext;
 import com.github.liaochong.myexcel.core.converter.WriteConverter;
 
 import java.lang.reflect.Field;
@@ -29,12 +29,12 @@ import java.lang.reflect.Field;
 public class OriginalWriteConverter implements WriteConverter {
 
     @Override
-    public Pair<Class, Object> convert(Field field, Object fieldVal, ConvertContext convertContext) {
-        return Pair.of(field.getType(), fieldVal);
+    public Pair<Class, Object> convert(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
+        return Pair.of(fieldType, fieldVal);
     }
 
     @Override
-    public boolean support(Field field, Object fieldVal, ConvertContext convertContext) {
+    public boolean support(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
         return true;
     }
 }

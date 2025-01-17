@@ -56,11 +56,7 @@ import java.util.zip.ZipOutputStream;
  * @author liaochong
  * @version 1.0
  */
-public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
-
-    private static final int XLSX_MAX_ROW_COUNT = 1048576;
-
-    private static final int XLS_MAX_ROW_COUNT = 65536;
+class HtmlToExcelStreamFactory extends AbstractExcelFactory {
 
     private static final Tr STOP_FLAG = new Tr(-1, 0);
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(HtmlToExcelStreamFactory.class);
@@ -120,8 +116,8 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
             this.workbook = workbook;
         }
         startTime = System.currentTimeMillis();
-        if (table != null) {
-            sheetName = this.getRealSheetName(table.getCaption());
+        if (table != null && table.caption != null) {
+            sheetName = table.caption;
         }
         Thread thread = new Thread(this::receive);
         thread.setName("myexcel-exec-" + thread.getId());
@@ -159,12 +155,30 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
             }
             initCellStyle(this.workbook);
             receiveThread = Thread.currentThread();
+            this.sheet = workbook.getSheet(sheetName);
+            if (this.sheet == null) {
+                this.sheet = this.createSheet(sheetName);
+            } else {
+                rowNum = count = this.sheet.getLastRowNum() + 1;
+                if (rowNum > 0) {
+                    context.trWaitQueue.clear();
+                }
+            }
             Tr tr = this.getTrFromQueue();
-            this.sheet = this.createSheet(sheetName);
             if (maxColIndex == 0) {
-                int tdSize = tr.getTdList().size();
+                int tdSize = tr.tdList.size();
                 maxColIndex = tdSize > 0 ? tdSize - 1 : 0;
             }
+            // 如果设置了width，首先初始化一次，避免图片缩放问题
+            tr.colWidthMap.forEach((key, value) -> {
+                int contentLength = value << 1;
+                if (contentLength > 255) {
+                    contentLength = 255;
+                }
+                sheet.setColumnWidth(key, contentLength << 8);
+            });
+            // 构建名称管理器
+            this.createNameManager();
             int totalSize = 0;
             while (tr != STOP_FLAG) {
                 if (context.capacity > 0 && count == context.capacity) {
@@ -173,18 +187,11 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
                     // 开启下一份数据
                     this.initNewWorkbook();
                 }
-                if (rowNum == maxRowCountOfSheet) {
-                    sheetNum++;
-                    this.setColWidth(colWidthMap, sheet, maxColIndex);
-                    colWidthMap = new HashMap<>();
-                    sheet = this.createSheet(sheetName + " (" + sheetNum + ")");
-                    rowNum = 0;
-                    this.setTitles();
-                }
+                createNextSheet();
                 setTdStyle(tr);
                 appendRow(tr);
                 totalSize++;
-                tr.getColWidthMap().forEach((k, v) -> {
+                tr.colWidthMap.forEach((k, v) -> {
                     Integer val = this.colWidthMap.get(k);
                     if (val == null || v > val) {
                         this.colWidthMap.put(k, v);
@@ -204,33 +211,54 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
         }
     }
 
+    private void createNextSheet() {
+        if (rowNum >= maxRowCountOfSheet) {
+            sheetNum++;
+            this.setColWidth(colWidthMap, sheet, maxColIndex);
+            colWidthMap = new HashMap<>();
+            sheet = workbook.getSheet(sheetName + " (" + sheetNum + ")");
+            if (sheet == null) {
+                sheet = this.createSheet(sheetName + " (" + sheetNum + ")");
+                rowNum = 0;
+                this.setTitles();
+            } else {
+                rowNum = this.sheet.getLastRowNum() + 1;
+                count += rowNum;
+                if (rowNum == 0) {
+                    this.setTitles();
+                }
+                createNextSheet();
+            }
+        }
+    }
+
     private void setTdStyle(Tr tr) {
-        if (tr.isFromTemplate()) {
+        if (tr.fromTemplate) {
             return;
         }
         context.styleParser.toggle();
         // 是否为自定义宽度
-        boolean isCustomWidth = !Objects.equals(tr.getColWidthMap(), Collections.emptyMap());
-        for (int i = 0, size = tr.getTdList().size(); i < size; i++) {
-            Td td = tr.getTdList().get(i);
-            if (td.isTh()) {
-                td.setStyle(context.styleParser.getTitleStyle("title&" + td.getCol()));
+        boolean isCustomWidth = !Objects.equals(tr.colWidthMap, Collections.emptyMap());
+        for (int i = 0, size = tr.tdList.size(); i < size; i++) {
+            Td td = tr.tdList.get(i);
+            if (td.th) {
+                td.style = context.styleParser.getTitleStyle("title&" + td.col);
             } else {
-                td.setStyle(context.styleParser.getCellStyle(i, td.getTdContentType(), td.getFormat()));
+                td.style = context.styleParser.getCellStyle(i, td.tdContentType, td.format);
             }
             if (isCustomWidth) {
-                String width = td.getStyle().get("width");
+                String width = td.style.get("width");
                 if (StringUtil.isNotBlank(width)) {
-                    tr.getColWidthMap().put(i, TdUtil.getValue(width));
+                    tr.colWidthMap.put(i, TdUtil.getValue(width));
                 }
             }
         }
     }
 
     private Tr getTrFromQueue() throws InterruptedException {
-        Tr tr = context.trWaitQueue.poll(1, TimeUnit.HOURS);
+        Tr tr = context.trWaitQueue.poll(15, TimeUnit.MINUTES);
         if (tr == null) {
-            throw new IllegalStateException("Get tr failure,timeout 1 hour.");
+            throw new IllegalStateException("Get tr failure,timeout 15 minutes.");
         }
         return tr;
     }
@@ -243,7 +271,7 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
         return workbook;
     }
 
-    public List<Path> buildAsPaths() {
+    List<Path> buildAsPaths() {
         waiting();
         this.storeToTempFile();
         futures.forEach(CompletableFuture::join);
@@ -251,7 +279,7 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
         return tempFilePaths.stream().filter(path -> Objects.nonNull(path) && path.toFile().exists()).collect(Collectors.toList());
     }
 
-    public void waiting() {
+    protected void waiting() {
         if (exception) {
             throw new IllegalStateException("An exception occurred while processing");
         }
@@ -326,7 +354,7 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
             sheet.createFreezePane(0, titles.size());
         }
         if (context.freezePane != null) {
-            sheet.createFreezePane(context.freezePane.getColSplit(), context.freezePane.getRowSplit());
+            sheet.createFreezePane(context.freezePane.colSplit, context.freezePane.rowSplit);
         }
     }
 
@@ -365,16 +393,16 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
     }
 
     private void appendRow(Tr tr) {
-        tr.setIndex(rowNum);
-        tr.getTdList().forEach(td -> {
-            td.setRow(rowNum);
+        tr.index = rowNum;
+        tr.tdList.forEach(td -> {
+            td.row = rowNum;
         });
         rowNum++;
         count++;
         this.createRow(tr, sheet);
     }
 
-    public Path buildAsZip(String fileName) {
+    Path buildAsZip(String fileName) {
         waiting();
         this.storeToTempFile();
         futures.forEach(CompletableFuture::join);
@@ -414,32 +442,32 @@ public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
     /**
      * 上下文
      */
-    public static class HtmlToExcelStreamFactoryContext {
+    static class HtmlToExcelStreamFactoryContext {
 
-        public BlockingQueue<Tr> trWaitQueue = new LinkedBlockingQueue<>(Runtime.getRuntime().availableProcessors() * 2);
+        BlockingQueue<Tr> trWaitQueue = new LinkedBlockingQueue<>(Math.max(Runtime.getRuntime().availableProcessors() * 10, 100));
         /**
          * 线程池
          */
-        public ExecutorService executorService;
+        ExecutorService executorService;
         /**
          * 文件分割,excel容量
          */
-        public int capacity;
+        int capacity;
 
-        public Consumer<Path> pathConsumer;
+        Consumer<Path> pathConsumer;
         /**
          * 是否固定标题
          */
-        public boolean fixedTitles;
+        boolean fixedTitles;
 
-        public StyleParser styleParser;
+        StyleParser styleParser;
 
         /**
          * sheet前置处理函数
          */
-        public Consumer<Sheet> startSheetConsumer = sheet -> {
+        Consumer<Sheet> startSheetConsumer = sheet -> {
         };
 
-        public FreezePane freezePane;
+        FreezePane freezePane;
     }
 }

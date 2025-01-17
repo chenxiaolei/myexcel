@@ -11,7 +11,7 @@
 
     <groupId>com.github.liaochong</groupId>
     <artifactId>myexcel</artifactId>
-    <version>3.10.0-kf20210408</version>
+    <version>3.10.0</version>
     <packaging>jar</packaging>
 
     <name>myexcel</name>
@@ -22,17 +22,20 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>1.8</java.version>
-        <poi.version>4.1.1</poi.version>
-        <jsoup.version>1.13.1</jsoup.version>
-        <lombok.version>1.18.10</lombok.version>
-        <slf4j-api.version>1.7.26</slf4j-api.version>
-        <beetl.version>2.9.9</beetl.version>
-        <velocity.version>1.7</velocity.version>
-        <freemarker.version>2.3.23</freemarker.version>
-        <groovy-templates.version>2.4.13</groovy-templates.version>
-        <thymeleaf.version>2.1.6.RELEASE</thymeleaf.version>
-        <enjoy.version>4.8</enjoy.version>
+        <poi.version>5.3.0</poi.version>
+        <jsoup.version>1.16.2</jsoup.version>
+        <lombok.version>1.18.22</lombok.version>
+        <beetl.version>3.15.4.RELEASE</beetl.version>
+        <velocity.version>2.3</velocity.version>
+        <freemarker.version>2.3.32</freemarker.version>
+        <groovy-templates.version>4.0.12</groovy-templates.version>
+        <thymeleaf.version>3.1.1.RELEASE</thymeleaf.version>
+        <enjoy.version>5.0.3</enjoy.version>
         <javax.servlet-api.version>4.0.1</javax.servlet-api.version>
+        <jakarta.servlet-api.version>5.0.0</jakarta.servlet-api.version>
+        <junit-jupiter-api.version>5.8.2</junit-jupiter-api.version>
+        <imageio-jpeg.version>3.9.4</imageio-jpeg.version>
+        <commons-csv.version>1.10.0</commons-csv.version>
     </properties>
 
     <dependencies>
@@ -40,22 +43,27 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>${poi.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.poi</groupId>
+                    <artifactId>poi-ooxml-lite</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.poi</groupId>
-            <artifactId>ooxml-schemas</artifactId>
-            <version>1.4</version>
-            <optional>true</optional>
+            <artifactId>poi-ooxml-full</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>${commons-csv.version}</version>
         </dependency>
         <dependency>
             <groupId>org.jsoup</groupId>
             <artifactId>jsoup</artifactId>
             <version>${jsoup.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j-api.version}</version>
         </dependency>
         <dependency>
             <groupId>com.ibeetl</groupId>
@@ -71,7 +79,7 @@
         </dependency>
         <dependency>
             <groupId>org.apache.velocity</groupId>
-            <artifactId>velocity</artifactId>
+            <artifactId>velocity-engine-core</artifactId>
             <version>${velocity.version}</version>
             <optional>true</optional>
         </dependency>
@@ -82,7 +90,7 @@
             <optional>true</optional>
         </dependency>
         <dependency>
-            <groupId>org.codehaus.groovy</groupId>
+            <groupId>org.apache.groovy</groupId>
             <artifactId>groovy-templates</artifactId>
             <version>${groovy-templates.version}</version>
             <optional>true</optional>
@@ -96,7 +104,7 @@
         <dependency>
             <groupId>com.twelvemonkeys.imageio</groupId>
             <artifactId>imageio-jpeg</artifactId>
-            <version>3.6</version>
+            <version>${imageio-jpeg.version}</version>
         </dependency>
         <dependency>
             <groupId>javax.servlet</groupId>
@@ -105,9 +113,15 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>${jakarta.servlet-api.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>5.5.2</version>
+            <version>${junit-jupiter-api.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -117,59 +131,6 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-
-    <repositories>
-        <repository>
-            <id>nexus</id>
-            <name>KF Team Nexus Repository</name>
-            <url>http://nexus.kefen.site:7300/repository/maven-public/</url>
-        </repository>
-        <repository>
-            <id>maven2-repository.dev.java.net</id>
-            <name>Java.net repository</name>
-            <url>http://download.java.net/maven/2</url>
-        </repository>
-        <repository>
-            <id>osgeo</id>
-            <name>Open Source Geospatial Foundation Repository</name>
-            <url>http://download.osgeo.org/webdav/geotools/</url>
-        </repository>
-        <repository>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-            <id>boundless</id>
-            <name>Boundless Maven Repository</name>
-            <url>http://repo.boundlessgeo.com/main</url>
-        </repository>
-        <repository>
-            <id>jcenter-snapshots</id>
-            <name>jcenter</name>
-            <url>http://oss.jfrog.org/artifactory/oss-snapshot-local/</url>
-        </repository>
-
-        <repository>
-            <id>spring-snapshots</id>
-            <name>Spring Snapshots</name>
-            <url>https://repo.spring.io/snapshot</url>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
-        </repository>
-    </repositories>
-
-    <distributionManagement>
-        <snapshotRepository>
-            <id>kf-snapshots</id>
-            <url>http://nexus.kefen.site:7300/repository/maven-snapshots/</url>
-        </snapshotRepository>
-        <repository>
-            <id>kf-releases</id>
-            <url>http://nexus.kefen.site:7300/repository/maven-releases/</url>
-        </repository>
-
-    </distributionManagement>
 
     <licenses>
         <license>

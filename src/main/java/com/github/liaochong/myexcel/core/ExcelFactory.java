@@ -15,8 +15,12 @@
  */
 package com.github.liaochong.myexcel.core;
 
+import com.github.liaochong.myexcel.core.strategy.SheetStrategy;
 import com.github.liaochong.myexcel.core.strategy.WidthStrategy;
 import org.apache.poi.ss.usermodel.Workbook;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author liaochong
@@ -30,6 +34,13 @@ public interface ExcelFactory {
      * @return ExcelFactory
      */
     ExcelFactory useDefaultStyle();
+
+    /**
+     * 应用默认样式
+     *
+     * @return ExcelFactory
+     */
+    ExcelFactory applyDefaultStyle();
 
     /**
      * 窗口冻结
@@ -54,6 +65,24 @@ public interface ExcelFactory {
      * @return ExcelFactory
      */
     ExcelFactory widthStrategy(WidthStrategy widthStrategy);
+
+    /**
+     * 生成 sheet 策略
+     *
+     * @param sheetStrategy 策略
+     * @return ExcelFactory
+     */
+    ExcelFactory sheetStrategy(SheetStrategy sheetStrategy);
+
+    /**
+     * 指定名称管理器
+     *
+     * @param nameMapping 名称映射
+     * @return ExcelFactory
+     */
+    default ExcelFactory nameManager(Map<String, List<?>> nameMapping) {
+        return this;
+    }
 
     /**
      * 构建

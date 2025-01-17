@@ -15,6 +15,8 @@
 package com.github.liaochong.myexcel.core.pojo;
 
 import com.github.liaochong.myexcel.core.annotation.ExcelColumn;
+import com.github.liaochong.myexcel.core.annotation.MultiColumn;
+import com.github.liaochong.myexcel.core.annotation.Prompt;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.experimental.FieldDefaults;
@@ -36,6 +38,10 @@ public class CommonPeople extends Person {
     @ExcelColumn(title = "当前时间", index = 6)
     LocalDateTime localDateTime;
 
-    @ExcelColumn(title = "小猫数目", index = 7)
+    @ExcelColumn(prompt = @Prompt(title = "提示", text = "这是我的提示哦"))
     Long cats;
+
+    @MultiColumn(classType = Extention.class)
+    Extention extention;
+
 }

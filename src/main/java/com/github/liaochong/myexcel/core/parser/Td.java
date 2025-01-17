@@ -15,9 +15,11 @@
  */
 package com.github.liaochong.myexcel.core.parser;
 
+import com.github.liaochong.myexcel.core.PromptContainer;
 import com.github.liaochong.myexcel.utils.TdUtil;
 
 import java.io.File;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -33,62 +35,84 @@ public class Td {
     /**
      * 所在行
      */
-    private int row;
+    public int row;
     /**
      * 所在列
      */
-    private int col;
+    public int col;
     /**
      * 跨行数
      */
-    private int rowSpan;
+    public int rowSpan;
     /**
      * 跨列数
      */
-    private int colSpan;
+    public int colSpan;
     /**
      * 内容
      */
-    private String content;
+    public String content;
     /**
      * 内容类型
      */
-    private ContentTypeEnum tdContentType = ContentTypeEnum.STRING;
+    public ContentTypeEnum tdContentType = ContentTypeEnum.STRING;
     /**
      * 是否为th
      */
-    private boolean th;
+    public boolean th;
     /**
      * 单元格样式
      */
-    private Map<String, String> style = Collections.emptyMap();
+    public Map<String, String> style = Collections.emptyMap();
     /**
      * 公式
      */
-    private boolean formula;
+    public boolean formula;
     /**
      * 链接
      */
-    private String link;
+    public String link;
     /**
      * 文件
      */
-    private File file;
+    public File file;
+    /**
+     * 文件流
+     */
+    public InputStream fileIs;
     /**
      * 格式化
      */
-    private String format;
+    public String format;
 
     /**
      * 时间是常用对象，特殊化
      */
-    private Date date;
+    public Date date;
 
-    private LocalDate localDate;
+    public LocalDate localDate;
 
-    private LocalDateTime localDateTime;
+    public LocalDateTime localDateTime;
 
-    private List<Font> fonts;
+    public List<Font> fonts;
+
+    public PromptContainer promptContainer;
+    /**
+     * 斜线
+     */
+    public Slant slant;
+    /**
+     * 批注
+     */
+    public Comment comment;
+    /**
+     * 图片配置
+     */
+    public Image image;
+    /**
+     * 下拉列表配置
+     */
+    public DropdownList dropdownList;
 
     public Td(int row, int col) {
         this.row = row;
@@ -110,130 +134,18 @@ public class Td {
     }
 
     public int getRowBound() {
-        return TdUtil.get(this::getRowSpan, this::getRow);
+        return TdUtil.get(this.rowSpan, this.row);
     }
 
     public int getColBound() {
-        return TdUtil.get(this::getColSpan, this::getCol);
+        return TdUtil.get(this.colSpan, this.col);
     }
 
-    public int getRow() {
-        return this.row;
+    public Image getImage() {
+        return image;
     }
 
-    public int getCol() {
-        return this.col;
-    }
-
-    public int getRowSpan() {
-        return this.rowSpan;
-    }
-
-    public int getColSpan() {
-        return this.colSpan;
-    }
-
-    public String getContent() {
-        return this.content;
-    }
-
-    public ContentTypeEnum getTdContentType() {
-        return this.tdContentType;
-    }
-
-    public boolean isTh() {
-        return this.th;
-    }
-
-    public Map<String, String> getStyle() {
-        return this.style;
-    }
-
-    public boolean isFormula() {
-        return this.formula;
-    }
-
-    public String getLink() {
-        return this.link;
-    }
-
-    public File getFile() {
-        return this.file;
-    }
-
-    public String getFormat() {
-        return this.format;
-    }
-
-    public Date getDate() {
-        return this.date;
-    }
-
-    public LocalDate getLocalDate() {
-        return this.localDate;
-    }
-
-    public LocalDateTime getLocalDateTime() {
-        return this.localDateTime;
-    }
-
-    public void setRow(int row) {
-        this.row = row;
-    }
-
-    public void setCol(int col) {
-        this.col = col;
-    }
-
-    public void setContent(String content) {
-        this.content = content;
-    }
-
-    public void setTdContentType(ContentTypeEnum tdContentType) {
-        this.tdContentType = tdContentType;
-    }
-
-    public void setTh(boolean th) {
-        this.th = th;
-    }
-
-    public void setStyle(Map<String, String> style) {
-        this.style = style;
-    }
-
-    public void setFormula(boolean formula) {
-        this.formula = formula;
-    }
-
-    public void setLink(String link) {
-        this.link = link;
-    }
-
-    public void setFile(File file) {
-        this.file = file;
-    }
-
-    public void setFormat(String format) {
-        this.format = format;
-    }
-
-    public void setDate(Date date) {
-        this.date = date;
-    }
-
-    public void setLocalDate(LocalDate localDate) {
-        this.localDate = localDate;
-    }
-
-    public void setLocalDateTime(LocalDateTime localDateTime) {
-        this.localDateTime = localDateTime;
-    }
-
-    public List<Font> getFonts() {
-        return fonts;
-    }
-
-    public void setFonts(List<Font> fonts) {
-        this.fonts = fonts;
+    public void setImage(Image image) {
+        this.image = image;
     }
 }

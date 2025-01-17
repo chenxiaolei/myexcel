@@ -12,27 +12,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.github.liaochong.myexcel.core.converter;
+package com.github.liaochong.myexcel.core.pojo;
 
-import com.github.liaochong.myexcel.core.ConvertContext;
+import com.github.liaochong.myexcel.core.annotation.ExcelColumn;
+import com.github.liaochong.myexcel.core.annotation.MultiColumn;
+import lombok.Getter;
+import lombok.Setter;
 
-import java.lang.reflect.Field;
+import java.util.List;
 
 /**
- * 转换接口
- *
  * @author liaochong
  * @version 1.0
  */
-public interface Converter<E, T> {
+@Setter
+@Getter
+public class Extention {
 
-    /**
-     * 转换
-     *
-     * @param obj            被转换对象
-     * @param field          字段，提供额外信息
-     * @param convertContext 转换上下文
-     * @return 转换结果
-     */
-    T convert(E obj, Field field, ConvertContext convertContext);
+    @ExcelColumn(title = "name1")
+    private String name1;
+
+    @MultiColumn(classType = Integer.class)
+    @ExcelColumn(title = "age1")
+    private List<Integer> age1;
 }

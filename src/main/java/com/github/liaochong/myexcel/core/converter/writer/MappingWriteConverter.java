@@ -14,10 +14,9 @@
  */
 package com.github.liaochong.myexcel.core.converter.writer;
 
-import com.github.liaochong.myexcel.core.ConvertContext;
 import com.github.liaochong.myexcel.core.ExcelColumnMapping;
-import com.github.liaochong.myexcel.core.cache.WeakCache;
 import com.github.liaochong.myexcel.core.container.Pair;
+import com.github.liaochong.myexcel.core.converter.ConvertContext;
 import com.github.liaochong.myexcel.core.converter.WriteConverter;
 import com.github.liaochong.myexcel.utils.PropertyUtil;
 
@@ -30,29 +29,20 @@ import java.util.Properties;
  */
 public class MappingWriteConverter implements WriteConverter {
 
-    private WeakCache<String, Pair<Class, Object>> mappingCache = new WeakCache<>();
-
     @Override
-    public boolean support(Field field, Object fieldVal, ConvertContext convertContext) {
-        ExcelColumnMapping mapping = convertContext.getExcelColumnMappingMap().get(field);
-        return mapping != null && !mapping.getMapping().isEmpty();
+    public boolean support(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
+        ExcelColumnMapping mapping = convertContext.excelColumnMappingMap.get(field);
+        return mapping != null && !mapping.mapping.isEmpty();
     }
 
     @Override
-    public Pair<Class, Object> convert(Field field, Object fieldVal, ConvertContext convertContext) {
-        ExcelColumnMapping excelColumnMapping = convertContext.getExcelColumnMappingMap().get(field);
-        String cacheKey = excelColumnMapping.getMapping() + "->" + fieldVal;
-        Pair<Class, Object> mapping = mappingCache.get(cacheKey);
-        if (mapping != null) {
-            return mapping;
-        }
+    public Pair<Class, Object> convert(Field field, Class<?> fieldType, Object fieldVal, ConvertContext convertContext) {
+        ExcelColumnMapping excelColumnMapping = convertContext.excelColumnMappingMap.get(field);
         Properties properties = PropertyUtil.getProperties(excelColumnMapping);
         String property = properties.getProperty(fieldVal.toString());
         if (property == null) {
-            return Pair.of(field.getType(), fieldVal);
+            return Pair.of(fieldType, fieldVal);
         }
-        Pair<Class, Object> result = Pair.of(String.class, property);
-        mappingCache.cache(cacheKey, result);
-        return result;
+        return Pair.of(String.class, property);
     }
 }

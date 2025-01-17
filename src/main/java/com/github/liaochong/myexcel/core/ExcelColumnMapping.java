@@ -15,8 +15,13 @@
 package com.github.liaochong.myexcel.core;
 
 import com.github.liaochong.myexcel.core.annotation.ExcelColumn;
+import com.github.liaochong.myexcel.core.annotation.Prompt;
 import com.github.liaochong.myexcel.core.constant.FileType;
 import com.github.liaochong.myexcel.core.constant.LinkType;
+import com.github.liaochong.myexcel.core.converter.CustomWriteConverter;
+import com.github.liaochong.myexcel.core.parser.DropdownList;
+import com.github.liaochong.myexcel.core.parser.Image;
+import com.github.liaochong.myexcel.utils.StringUtil;
 
 /**
  * @author liaochong
@@ -27,67 +32,80 @@ public final class ExcelColumnMapping {
     /**
      * 列标题
      */
-    private String title;
+    public String title;
 
     /**
      * 顺序，数值越大越靠后
      */
-    private int order;
+    public int order;
 
     /**
      * 列索引，从零开始，不允许重复
      */
-    private int index;
+    public int index;
 
     /**
      * 分组
      */
-    private Class<?>[] groups;
+    public Class<?>[] groups;
 
     /**
      * 为null时默认值
      */
-    private String defaultValue;
+    public String defaultValue;
 
     /**
      * 宽度
      */
-    private int width;
+    public int width;
 
     /**
      * 是否强制转换成字符串
      */
-    private boolean convertToString;
+    public boolean convertToString;
 
     /**
      * 格式化，时间、金额等
      */
-    private String format;
+    public String format;
 
     /**
      * 样式
      */
-    private String[] style;
+    public String[] style;
 
     /**
      * 链接
      */
-    private LinkType linkType;
+    public LinkType linkType;
 
     /**
      * 简单映射，如"1:男,2:女"
      */
-    private String mapping;
+    public String mapping;
+    /**
+     * 自定义写转换器
+     */
+    public Class<? extends CustomWriteConverter> customWriteConverter;
 
     /**
      * 文件类型
      */
-    private FileType fileType;
+    public FileType fileType;
 
     /**
      * 是否为公式
      */
-    private boolean formula;
+    public boolean formula;
+
+    /**
+     * 提示语
+     */
+    public PromptContainer promptContainer;
+
+    public Image image;
+
+    public DropdownList dropdownList;
 
     public static ExcelColumnMapping mapping(ExcelColumn excelColumn) {
         ExcelColumnMapping result = new ExcelColumnMapping();
@@ -112,58 +130,52 @@ public final class ExcelColumnMapping {
         result.mapping = excelColumn.mapping();
         result.fileType = excelColumn.fileType();
         result.formula = excelColumn.formula();
+        result.customWriteConverter = excelColumn.writeConverter();
+        // 提示
+        Prompt prompt = excelColumn.prompt();
+        if (StringUtil.isNotBlank(prompt.text())) {
+            PromptContainer promptContainer = new PromptContainer();
+            promptContainer.title = prompt.title();
+            promptContainer.text = prompt.text();
+            result.promptContainer = promptContainer;
+        }
+        com.github.liaochong.myexcel.core.annotation.Image image = excelColumn.image();
+        if (image.scaleX() > 0 && image.scaleY() > 0) {
+            result.image.setScaleX(image.scaleX());
+            result.image.setScaleY(image.scaleY());
+            result.image = new Image();
+        }
+        if ((image.marginTop() > 0)) {
+            if (result.image == null) {
+                result.image = new Image();
+            }
+            result.image.setMarginTop(image.marginTop());
+        }
+        if ((image.marginLeft() > 0)) {
+            if (result.image == null) {
+                result.image = new Image();
+            }
+            result.image.setMarginLeft(image.marginLeft());
+        }
+        if (image.width() > 0) {
+            if (result.image == null) {
+                result.image = new Image();
+            }
+            result.image.setWidth(image.width());
+        }
+        if (image.height() > 0) {
+            if (result.image == null) {
+                result.image = new Image();
+            }
+            result.image.setHeight(image.height());
+        }
+        com.github.liaochong.myexcel.core.annotation.DropdownList dr = excelColumn.dropdownList();
+        if (StringUtil.isNotBlank(dr.name()) || StringUtil.isNotBlank(dr.parent())) {
+            DropdownList drList = new DropdownList();
+            drList.setName(dr.name());
+            drList.setParent(dr.parent());
+            result.dropdownList = drList;
+        }
         return result;
-    }
-
-    public String getTitle() {
-        return this.title;
-    }
-
-    public int getOrder() {
-        return this.order;
-    }
-
-    public int getIndex() {
-        return this.index;
-    }
-
-    public Class<?>[] getGroups() {
-        return this.groups;
-    }
-
-    public String getDefaultValue() {
-        return this.defaultValue;
-    }
-
-    public int getWidth() {
-        return this.width;
-    }
-
-    public boolean isConvertToString() {
-        return this.convertToString;
-    }
-
-    public String getFormat() {
-        return this.format;
-    }
-
-    public String[] getStyle() {
-        return this.style;
-    }
-
-    public LinkType getLinkType() {
-        return this.linkType;
-    }
-
-    public String getMapping() {
-        return this.mapping;
-    }
-
-    public FileType getFileType() {
-        return this.fileType;
-    }
-
-    public boolean isFormula() {
-        return this.formula;
     }
 }

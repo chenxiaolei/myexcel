@@ -18,7 +18,6 @@ package com.github.liaochong.myexcel.utils;
 import com.github.liaochong.myexcel.core.cache.Cache;
 import com.github.liaochong.myexcel.core.cache.WeakCache;
 
-import java.util.Arrays;
 import java.util.function.IntSupplier;
 import java.util.regex.Pattern;
 
@@ -29,17 +28,15 @@ import java.util.regex.Pattern;
  */
 public final class TdUtil {
 
-    private static Pattern chineseOrCapitalPattern = Pattern.compile("[\u4e00-\u9fa5|A-Z]");
+    private static final Pattern chineseOrCapitalPattern = Pattern.compile("[\u4e00-\u9fa5|A-Z]");
 
-    private static Pattern digitalPattern = Pattern.compile("^\\d+$");
+    private static final Pattern digitalPattern = Pattern.compile("^\\d+$");
 
-    private static Pattern nonDigitalPattern = Pattern.compile("[^\\d]+");
+    private static final Pattern nonDigitalPattern = Pattern.compile("[^\\d]+");
 
     private static final Cache<String, Integer> SPAN_CACHE = new WeakCache<>();
 
-    public static int get(IntSupplier firstSupplier, IntSupplier secondSupplier) {
-        int firstValue = firstSupplier.getAsInt();
-        int secondValue = secondSupplier.getAsInt();
+    public static int get(int firstValue, int secondValue) {
         return firstValue > 0 ? secondValue + firstValue - 1 : secondValue;
     }
 
@@ -61,17 +58,8 @@ public final class TdUtil {
         return digitalPattern.matcher(span).find();
     }
 
-    public static int getMultiLineStringWidth(String s) {
-        return getMultiLineStringWidth(s, 0);
-    }
-
     public static int getStringWidth(String s) {
         return getStringWidth(s, 0);
-    }
-
-    public static int getMultiLineStringWidth(String s, double shift) {
-        String[] lines=s.split("\n");
-        return Arrays.stream(lines).map(line->getStringWidth(s,shift)).reduce(Integer::max).orElse(1);
     }
 
     public static int getStringWidth(String s, double shift) {

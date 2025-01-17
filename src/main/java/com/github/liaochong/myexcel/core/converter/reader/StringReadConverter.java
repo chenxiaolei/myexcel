@@ -14,10 +14,8 @@
  */
 package com.github.liaochong.myexcel.core.converter.reader;
 
-import com.github.liaochong.myexcel.core.ConvertContext;
-import com.github.liaochong.myexcel.core.converter.Converter;
-
-import java.lang.reflect.Field;
+import com.github.liaochong.myexcel.core.context.ReadContext;
+import com.github.liaochong.myexcel.core.converter.ReadConverter;
 
 /**
  * String读取转换器
@@ -25,10 +23,10 @@ import java.lang.reflect.Field;
  * @author liaochong
  * @version 1.0
  */
-public class StringReadConverter implements Converter<String, String> {
+public class StringReadConverter implements ReadConverter<String> {
 
     @Override
-    public String convert(String obj, Field field, ConvertContext convertContext) {
-        return obj;
+    public String convert(ReadContext<?> readContext) {
+        return readContext.getVal();
     }
 }

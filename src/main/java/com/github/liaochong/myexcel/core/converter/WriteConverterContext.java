@@ -15,22 +15,25 @@
  */
 package com.github.liaochong.myexcel.core.converter;
 
-import com.github.liaochong.myexcel.core.ConvertContext;
 import com.github.liaochong.myexcel.core.cache.WeakCache;
 import com.github.liaochong.myexcel.core.constant.AllConverter;
+import com.github.liaochong.myexcel.core.constant.Constants;
 import com.github.liaochong.myexcel.core.constant.CsvConverter;
 import com.github.liaochong.myexcel.core.container.Pair;
 import com.github.liaochong.myexcel.core.converter.writer.BigDecimalWriteConverter;
+import com.github.liaochong.myexcel.core.converter.writer.CustomWriteConverter;
 import com.github.liaochong.myexcel.core.converter.writer.DateTimeWriteConverter;
 import com.github.liaochong.myexcel.core.converter.writer.DropDownListWriteConverter;
 import com.github.liaochong.myexcel.core.converter.writer.ImageWriteConverter;
 import com.github.liaochong.myexcel.core.converter.writer.LinkWriteConverter;
+import com.github.liaochong.myexcel.core.converter.writer.LocalTimeWriteConverter;
 import com.github.liaochong.myexcel.core.converter.writer.MappingWriteConverter;
+import com.github.liaochong.myexcel.core.converter.writer.MultiWriteConverter;
 import com.github.liaochong.myexcel.core.converter.writer.OriginalWriteConverter;
 import com.github.liaochong.myexcel.core.converter.writer.StringWriteConverter;
+import com.github.liaochong.myexcel.utils.FieldDefinition;
 import com.github.liaochong.myexcel.utils.ReflectUtil;
 
-import javax.lang.model.type.NullType;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,24 +46,25 @@ import java.util.Optional;
  */
 public class WriteConverterContext {
 
-    private static final Pair<? extends Class, Object> NULL_PAIR = Pair.of(NullType.class, null);
-
     private static final List<Pair<Class, WriteConverter>> WRITE_CONVERTER_CONTAINER = new ArrayList<>();
 
-    private static final WeakCache<Field, WriteConverter> EXCEL_CONVERTER_CACHE = new WeakCache<>();
+    private static final WeakCache<Pair<Field, Class<?>>, WriteConverter> EXCEL_CONVERTER_CACHE = new WeakCache<>();
 
-    private static final WeakCache<Field, WriteConverter> CSV_CONVERTER_CACHE = new WeakCache<>();
+    private static final WeakCache<Pair<Field, Class<?>>, WriteConverter> CSV_CONVERTER_CACHE = new WeakCache<>();
 
     private static final OriginalWriteConverter ORIGINAL_WRITE_CONVERTER = new OriginalWriteConverter();
 
     static {
         WRITE_CONVERTER_CONTAINER.add(Pair.of(CsvConverter.class, new DateTimeWriteConverter()));
+        WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new LocalTimeWriteConverter()));
         WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new StringWriteConverter()));
         WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new BigDecimalWriteConverter()));
         WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new DropDownListWriteConverter()));
         WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new LinkWriteConverter()));
+        WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new CustomWriteConverter()));
         WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new MappingWriteConverter()));
         WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new ImageWriteConverter()));
+        WRITE_CONVERTER_CONTAINER.add(Pair.of(AllConverter.class, new MultiWriteConverter(WRITE_CONVERTER_CONTAINER)));
     }
 
     public static synchronized void registering(WriteConverter... writeConverters) {
@@ -70,24 +74,54 @@ public class WriteConverterContext {
         }
     }
 
-    public static Pair<? extends Class, Object> convert(Field field, Object object, ConvertContext convertContext) {
-        Object result = ReflectUtil.getFieldValue(object, field);
+    public static Pair<? extends Class, Object> convert(FieldDefinition fieldDefinition, Object object, ConvertContext convertContext) {
+        Object result = getFieldVal(fieldDefinition, object);
         if (result == null) {
-            return NULL_PAIR;
+            return Constants.NULL_PAIR;
         }
-        WriteConverter writeConverter = convertContext.isConvertCsv() ? CSV_CONVERTER_CACHE.get(field) : EXCEL_CONVERTER_CACHE.get(field);
-        if (writeConverter == null) {
-            Optional<WriteConverter> writeConverterOptional = WRITE_CONVERTER_CONTAINER.stream()
-                    .filter(pair -> (pair.getKey() == convertContext.getConverterType() || pair.getKey() == AllConverter.class) && pair.getValue().support(field, result, convertContext))
-                    .map(Pair::getValue)
-                    .findFirst();
-            writeConverter = writeConverterOptional.isPresent() ? writeConverterOptional.get() : ORIGINAL_WRITE_CONVERTER;
-            if (convertContext.isConvertCsv()) {
-                CSV_CONVERTER_CACHE.cache(field, writeConverter);
-            } else {
-                EXCEL_CONVERTER_CACHE.cache(field, writeConverter);
+        WriteConverter writeConverter = getWriteConverter(fieldDefinition.getField(), fieldDefinition.getField().getType(), result, convertContext, WRITE_CONVERTER_CONTAINER);
+        return writeConverter.convert(fieldDefinition.getField(), fieldDefinition.getField().getType(), result, convertContext);
+    }
+
+    private static Object getFieldVal(FieldDefinition fieldDefinition, Object object) {
+        Object result;
+        if (fieldDefinition.getParentFields() == null
+                || fieldDefinition.getParentFields().isEmpty()) {
+            result = ReflectUtil.getFieldValue(object, fieldDefinition);
+        } else {
+            Object prevObj;
+            try {
+                prevObj = object;
+                for (int i = 0, size = fieldDefinition.getParentFields().size(); i < size; i++) {
+                    Field parentField = fieldDefinition.getParentFields().get(i);
+                    prevObj = parentField.get(prevObj);
+                }
+                if (prevObj == null) {
+                    return null;
+                }
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
             }
+            result = ReflectUtil.getFieldValue(prevObj, fieldDefinition);
         }
-        return writeConverter.convert(field, result, convertContext);
+        return result;
+    }
+
+    public static WriteConverter getWriteConverter(Field field, Class<?> fieldType, Object result, ConvertContext convertContext, List<Pair<Class, WriteConverter>> writeConverterContainer) {
+        WriteConverter writeConverter = convertContext.isConvertCsv ? CSV_CONVERTER_CACHE.get(Pair.of(field, fieldType)) : EXCEL_CONVERTER_CACHE.get(Pair.of(field, fieldType));
+        if (writeConverter != null) {
+            return writeConverter;
+        }
+        Optional<WriteConverter> writeConverterOptional = writeConverterContainer.stream()
+                .filter(pair -> (pair.getKey() == convertContext.converterType || pair.getKey() == AllConverter.class) && pair.getValue().support(field, fieldType, result, convertContext))
+                .map(Pair::getValue)
+                .findFirst();
+        writeConverter = writeConverterOptional.orElse(ORIGINAL_WRITE_CONVERTER);
+        if (convertContext.isConvertCsv) {
+            CSV_CONVERTER_CACHE.cache(Pair.of(field, fieldType), writeConverter);
+        } else {
+            EXCEL_CONVERTER_CACHE.cache(Pair.of(field, fieldType), writeConverter);
+        }
+        return writeConverter;
     }
 }

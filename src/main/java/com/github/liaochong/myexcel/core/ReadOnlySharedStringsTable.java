@@ -15,10 +15,10 @@
 package com.github.liaochong.myexcel.core;
 
 import com.github.liaochong.myexcel.core.cache.StringsCache;
-import org.apache.poi.ooxml.util.SAXHelper;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.openxml4j.opc.PackagePart;
 import org.apache.poi.ss.usermodel.RichTextString;
+import org.apache.poi.util.XMLHelper;
 import org.apache.poi.xssf.model.SharedStrings;
 import org.apache.poi.xssf.usermodel.XSSFRelation;
 import org.apache.poi.xssf.usermodel.XSSFRichTextString;
@@ -40,12 +40,7 @@ import static org.apache.poi.xssf.usermodel.XSSFRelation.NS_SPREADSHEETML;
  * @author liaochong
  * @version 1.0
  */
-public class ReadOnlySharedStringsTable extends DefaultHandler implements SharedStrings {
-    /**
-     * whether or not to concatenate phoneticRuns onto the shared string
-     */
-    private final boolean includePhoneticRuns = true;
-
+class ReadOnlySharedStringsTable extends DefaultHandler implements SharedStrings {
     /**
      * An integer representing the total count of strings in the workbook. This count does not
      * include any numbers, it counts only the total of text strings in the workbook.
@@ -62,7 +57,7 @@ public class ReadOnlySharedStringsTable extends DefaultHandler implements Shared
     /**
      * The shared strings table.
      */
-    private StringsCache stringsCache;
+    private final StringsCache stringsCache;
 
     private int stringIndex;
 
@@ -100,11 +95,10 @@ public class ReadOnlySharedStringsTable extends DefaultHandler implements Shared
         int emptyTest = pis.read();
         if (emptyTest > -1) {
             pis.unread(emptyTest);
-            InputSource sheetSource = new InputSource(pis);
             try {
-                XMLReader sheetParser = SAXHelper.newXMLReader();
+                XMLReader sheetParser = XMLHelper.newXMLReader();
                 sheetParser.setContentHandler(this);
-                sheetParser.parse(sheetSource);
+                sheetParser.parse(new InputSource(pis));
                 stringsCache.finished();
             } catch (ParserConfigurationException e) {
                 throw new RuntimeException("SAX parser appears to be broken - " + e.getMessage());
@@ -170,10 +164,6 @@ public class ReadOnlySharedStringsTable extends DefaultHandler implements Shared
             tIsOpen = true;
         } else if ("rPh".equals(localName)) {
             inRPh = true;
-            //append space...this assumes that rPh always comes after regular <t>
-            if (includePhoneticRuns && characters.length() > 0) {
-                characters.append(" ");
-            }
         }
     }
 
@@ -198,9 +188,7 @@ public class ReadOnlySharedStringsTable extends DefaultHandler implements Shared
     @Override
     public void characters(char[] ch, int start, int length) throws SAXException {
         if (tIsOpen) {
-            if (inRPh && includePhoneticRuns) {
-                characters.append(ch, start, length);
-            } else if (!inRPh) {
+            if (!inRPh) {
                 characters.append(ch, start, length);
             }
         }

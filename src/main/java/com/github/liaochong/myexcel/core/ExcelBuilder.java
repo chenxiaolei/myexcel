@@ -16,10 +16,12 @@
 package com.github.liaochong.myexcel.core;
 
 import com.github.liaochong.myexcel.core.strategy.AutoWidthStrategy;
+import com.github.liaochong.myexcel.core.strategy.SheetStrategy;
 import com.github.liaochong.myexcel.core.strategy.WidthStrategy;
 import org.apache.poi.ss.usermodel.Workbook;
 
 import java.io.Closeable;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -46,6 +48,13 @@ public interface ExcelBuilder extends Closeable {
     ExcelBuilder useDefaultStyle();
 
     /**
+     * 应用默认样式
+     *
+     * @return ExcelBuilder
+     */
+    ExcelBuilder applyDefaultStyle();
+
+    /**
      * 自动宽度策略
      *
      * @param autoWidthStrategy 策略
@@ -61,6 +70,14 @@ public interface ExcelBuilder extends Closeable {
      * @return ExcelBuilder
      */
     ExcelBuilder widthStrategy(WidthStrategy widthStrategy);
+
+    /**
+     * Sheet 策略
+     *
+     * @param sheetStrategy 策略
+     * @return ExcelBuilder
+     */
+    ExcelBuilder sheetStrategy(SheetStrategy sheetStrategy);
 
     /**
      * 选择固定区域
@@ -95,6 +112,16 @@ public interface ExcelBuilder extends Closeable {
      * @return ExcelBuilder
      */
     ExcelBuilder fileTemplate(String dirPath, String fileName);
+
+    /**
+     * 指定名称管理器
+     *
+     * @param nameMapping 名称映射
+     * @return ExcelFactory
+     */
+    default ExcelBuilder nameManager(Map<String, List<?>> nameMapping) {
+        return this;
+    }
 
     /**
      * 构建

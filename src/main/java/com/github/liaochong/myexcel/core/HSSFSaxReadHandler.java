@@ -14,6 +14,7 @@
  */
 package com.github.liaochong.myexcel.core;
 
+import com.github.liaochong.myexcel.core.context.Hyperlink;
 import org.apache.poi.hssf.eventusermodel.EventWorkbookBuilder;
 import org.apache.poi.hssf.eventusermodel.FormatTrackingHSSFListener;
 import org.apache.poi.hssf.eventusermodel.HSSFEventFactory;
@@ -38,15 +39,19 @@ import org.apache.poi.hssf.record.SSTRecord;
 import org.apache.poi.hssf.record.StringRecord;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
+import org.apache.poi.ss.util.CellAddress;
 import org.slf4j.Logger;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * HSSF sax处理
@@ -57,18 +62,17 @@ import java.util.Set;
 public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSSFListener {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(HSSFSaxReadHandler.class);
-    private Set<Integer> sheetIndexs;
 
     private String sheetName;
 
-    private POIFSFileSystem fs;
+    private final POIFSFileSystem fs;
 
     private int lastRowNumber = -1;
 
     /**
      * Should we output the formula, or the value it has?
      */
-    private boolean outputFormulaValues = true;
+    private final boolean outputFormulaValues = true;
 
     /**
      * For parsing Formulas
@@ -85,25 +89,31 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
      */
     private int sheetIndex = -1;
     private BoundSheetRecord[] orderedBSRs;
-    private List<BoundSheetRecord> boundSheetRecords = new ArrayList<>();
+    private final List<BoundSheetRecord> boundSheetRecords = new ArrayList<>();
 
     // For handling formulas with string results
     private int nextRow;
     private int nextColumn;
     private boolean outputNextStringRecord;
 
+    private final Map<Integer, Map<CellAddress, CellAddress>> mergeCellIndexMapping;
+
+    private Map<CellAddress, String> mergeFirstCellMapping;
+
+    private boolean detectedMergeOfThisSheet;
+
+    private long waitCount = 0;
+
+    private final HSSFPreReadHandler.HSSFPreData hssfPreData;
+
     public HSSFSaxReadHandler(File file,
                               List<T> result,
-                              SaxExcelReader.ReadConfig<T> readConfig) throws IOException {
-        this(new FileInputStream(file), result, readConfig);
-    }
-
-    public HSSFSaxReadHandler(InputStream inputStream,
-                              List<T> result,
-                              SaxExcelReader.ReadConfig<T> readConfig) throws IOException {
-        super(false, result, readConfig);
-        this.fs = new POIFSFileSystem(inputStream);
-        this.sheetIndexs = readConfig.getSheetIndexs();
+                              SaxExcelReader.ReadConfig<T> readConfig,
+                              HSSFPreReadHandler.HSSFPreData hssfPreData) throws IOException {
+        super(false, result, readConfig, Collections.emptyMap());
+        this.fs = new POIFSFileSystem(Files.newInputStream(file.toPath()));
+        this.hssfPreData = hssfPreData;
+        this.mergeCellIndexMapping = hssfPreData != null ? hssfPreData.mergeCellIndexMapping : Collections.emptyMap();
     }
 
     public void process() throws IOException {
@@ -141,14 +151,24 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
                     if (workbookBuildingListener != null && stubWorkbook == null) {
                         stubWorkbook = workbookBuildingListener.getStubHSSFWorkbook();
                     }
+                    if (hssfPreData != null) {
+                        hssfPreData.hyperlinkMapping.remove(sheetIndex);
+                        hssfPreData.mergeCellIndexMapping.remove(sheetIndex);
+                    }
                     sheetIndex++;
                     setRecordAsNull();
                     lastRowNumber = -1;
+                    titles = new LinkedHashMap<>();
                     if (orderedBSRs == null) {
                         orderedBSRs = BoundSheetRecord.orderByBofPosition(boundSheetRecords);
                     }
                     sheetName = orderedBSRs[sheetIndex].getSheetname();
-                    readConfig.getStartSheetConsumer().accept(sheetName, sheetIndex);
+                    readContext.readConfig.startSheetConsumer.accept(sheetName, sheetIndex);
+                    mergeCellMapping = mergeCellIndexMapping.getOrDefault(sheetIndex, Collections.emptyMap());
+                    detectedMergeOfThisSheet = !mergeCellMapping.isEmpty();
+                    waitCount = 0;
+                    mergeFirstCellMapping = mergeCellMapping.values().stream().distinct().collect(Collectors.toMap(cellAddress -> cellAddress, c -> ""));
+                    setFieldHandlerFunction();
                 }
                 break;
 
@@ -161,7 +181,6 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
 
                 thisRow = brec.getRow();
                 thisColumn = brec.getColumn();
-                thisStr = null;
                 break;
             case BoolErrRecord.sid:
                 BoolErrRecord berec = (BoolErrRecord) record;
@@ -213,9 +232,7 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
 
                 thisRow = lsrec.getRow();
                 thisColumn = lsrec.getColumn();
-                if (sstRecord == null) {
-                    thisStr = null;
-                } else {
+                if (sstRecord != null) {
                     thisStr = sstRecord.getString(lsrec.getSSTIndex()).toString();
                 }
                 break;
@@ -224,7 +241,6 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
 
                 thisRow = nrec.getRow();
                 thisColumn = nrec.getColumn();
-                thisStr = null;
                 break;
             case NumberRecord.sid:
                 NumberRecord numrec = (NumberRecord) record;
@@ -240,7 +256,6 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
 
                 thisRow = rkrec.getRow();
                 thisColumn = rkrec.getColumn();
-                thisStr = null;
                 break;
             default:
                 break;
@@ -262,10 +277,33 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
         // Handle new row
         if (thisRow != -1 && thisRow != lastRowNumber) {
             lastRowNumber = thisRow;
-            newRow(thisRow);
+            newRow(thisRow, !detectedMergeOfThisSheet || waitCount == 0);
+            if (detectedMergeOfThisSheet && waitCount == 0) {
+                waitCount = mergeCellMapping.entrySet().stream().filter(c -> c.getValue().getColumn() == 0
+                        && Objects.equals(c.getValue().getRow(), lastRowNumber)
+                        && c.getKey().getRow() != c.getValue().getRow()).count() + 1;
+            }
+            waitCount--;
         }
         boolean isSelectedSheet = this.isSelectedSheet();
-        if (isSelectedSheet) {
+        if (isSelectedSheet && thisColumn != -1) {
+            if (readContext.readConfig.detectedMerge) {
+                CellAddress cellAddress = new CellAddress(thisRow, thisColumn);
+                String finalThisStr = thisStr;
+                mergeFirstCellMapping.computeIfPresent(cellAddress, (k, v) -> finalThisStr);
+                CellAddress firstCellAddress = mergeCellIndexMapping.getOrDefault(sheetIndex, Collections.emptyMap()).get(cellAddress);
+                if (firstCellAddress != null) {
+                    thisStr = mergeFirstCellMapping.get(firstCellAddress);
+                }
+            }
+            if (hssfPreData != null && !hssfPreData.hyperlinkMapping.isEmpty()) {
+                Map<CellAddress, Hyperlink> hyperlinkMapping = hssfPreData.hyperlinkMapping.get(sheetIndex);
+                if (hyperlinkMapping != null) {
+                    CellAddress cellAddress = new CellAddress(thisRow, thisColumn);
+                    Hyperlink hyperlink = hyperlinkMapping.get(cellAddress);
+                    readContext.setHyperlink(hyperlink);
+                }
+            }
             handleField(thisColumn, thisStr);
         }
         // Handle end of row
@@ -274,17 +312,19 @@ public class HSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements HSS
                 this.titles.clear();
                 return;
             }
-            handleResult();
+            if (!detectedMergeOfThisSheet || waitCount == 0) {
+                handleResult();
+            }
         }
     }
 
     private boolean isSelectedSheet() {
-        if (readConfig.isReadAllSheet()) {
+        if (readContext.readConfig.readAllSheet) {
             return true;
         }
-        if (!readConfig.getSheetNames().isEmpty()) {
-            return readConfig.getSheetNames().contains(sheetName);
+        if (!readContext.readConfig.sheetNames.isEmpty()) {
+            return readContext.readConfig.sheetNames.contains(sheetName);
         }
-        return sheetIndexs.contains(sheetIndex);
+        return readContext.readConfig.sheetIndexs.contains(sheetIndex);
     }
 }

@@ -2,7 +2,9 @@ package com.github.liaochong.myexcel.core;
 
 import com.github.liaochong.myexcel.core.pojo.CommonPeople;
 import com.github.liaochong.myexcel.core.pojo.CustomStylePeople;
+import com.github.liaochong.myexcel.core.pojo.Extention;
 import com.github.liaochong.myexcel.core.pojo.Formula;
+import com.github.liaochong.myexcel.core.pojo.MultiPeople;
 import com.github.liaochong.myexcel.core.pojo.OddEvenStylePeople;
 import com.github.liaochong.myexcel.core.pojo.Product;
 import com.github.liaochong.myexcel.core.pojo.WidthPeople;
@@ -24,7 +26,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 
 /**
@@ -62,10 +63,11 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
     void commonBuild() throws Exception {
         try (DefaultStreamExcelBuilder<CommonPeople> excelBuilder = DefaultStreamExcelBuilder.of(CommonPeople.class)
                 .fixedTitles()
+                .autoMerge()
 //                .hideColumns(0, 1)
 //                .globalStyle("background-color:red;", "title->background-color:yellow;")
                 .start()) {
-            data(excelBuilder, 5000);
+            data(excelBuilder, 5);
             Workbook workbook = excelBuilder.build();
             FileExportUtil.export(workbook, new File(TEST_OUTPUT_DIR + "common_build.xlsx"));
         }
@@ -77,7 +79,7 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
                 .fixedTitles()
                 .threadPool(Executors.newFixedThreadPool(10))
                 .start()) {
-            for (int i = 0; i < 1000; i++) {
+            for (int i = 0; i < 100; i++) {
                 excelBuilder.asyncAppend(this::dataList);
             }
             Workbook workbook = excelBuilder.build();
@@ -167,7 +169,7 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
         try (DefaultStreamExcelBuilder<CommonPeople> excelBuilder = DefaultStreamExcelBuilder.of(CommonPeople.class)
                 .fixedTitles()
                 .start()) {
-            data(excelBuilder, 65500);
+            data(excelBuilder, 165050);
             Workbook workbook = excelBuilder.build();
             FileExportUtil.export(workbook, new File(TEST_OUTPUT_DIR + "big_build.xlsx"));
         }
@@ -251,32 +253,68 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
                 .start()) {
             data(excelBuilder, 5000);
             Workbook workbook = excelBuilder.build();
+//            WatermarkUtil.addWatermark(workbook, "视频");
             FileExportUtil.export(workbook, new File(TEST_OUTPUT_DIR + "common_build.xlsx"));
+        }
+    }
+
+    @Test
+    void testMultiColumn() throws Exception {
+        try (DefaultStreamExcelBuilder<MultiPeople> excelBuilder = DefaultStreamExcelBuilder.of(MultiPeople.class)
+                .fixedTitles()
+                .freezePane(new FreezePane(2, 5))
+                .start()) {
+            multiData(excelBuilder);
+            Workbook workbook = excelBuilder.build();
+            FileExportUtil.export(workbook, new File(TEST_OUTPUT_DIR + "multi_build.xlsx"));
+        }
+    }
+
+    private void multiData(DefaultStreamExcelBuilder<MultiPeople> excelBuilder) {
+        for (int j = 0; j < 3; j++) {
+            MultiPeople people = new MultiPeople();
+            people.setTastes(new LinkedList<>());
+            people.setDates(new LinkedList<>());
+            people.setName("姓名" + j);
+            for (int i = 0; i < 5; i++) {
+                people.getTastes().add("兴趣" + i);
+            }
+            for (int i = 0; i < 10; i++) {
+                people.getDates().add(new Date());
+            }
+            excelBuilder.append(people);
         }
     }
 
     private void data(DefaultStreamExcelBuilder<CommonPeople> excelBuilder, int size) {
         BigDecimal oddMoney = new BigDecimal(109898);
         BigDecimal evenMoney = new BigDecimal(66666);
-        List<CompletableFuture> futures = new LinkedList<>();
+        List<String> ss = new ArrayList<>();
+        ss.add("1");
+        ss.add("2");
         for (int i = 0; i < size; i++) {
             int index = i;
-            CompletableFuture future = CompletableFuture.runAsync(() -> {
-                CommonPeople commonPeople = new CommonPeople();
-                boolean odd = index % 2 == 0;
-                commonPeople.setName(odd ? "张三" : "李四");
-                commonPeople.setAge(odd ? 18 : 24);
-                commonPeople.setDance(odd ? true : false);
-                commonPeople.setMoney(odd ? oddMoney : evenMoney);
-                commonPeople.setBirthday(new Date());
-                commonPeople.setLocalDate(LocalDate.now());
-                commonPeople.setLocalDateTime(LocalDateTime.now());
-                commonPeople.setCats(100L);
-                excelBuilder.append(commonPeople);
-            });
-            futures.add(future);
+            CommonPeople commonPeople = new CommonPeople();
+            boolean odd = index % 2 == 0;
+            commonPeople.setName(odd ? "张三" : "李四");
+            commonPeople.setAge(odd ? 18 : 24);
+            commonPeople.setDance(odd);
+            commonPeople.setMoney(odd ? oddMoney : evenMoney);
+            commonPeople.setBirthday(new Date());
+            commonPeople.setLocalDate(LocalDate.now());
+            commonPeople.setLocalDateTime(LocalDateTime.now());
+            commonPeople.setCats(100L);
+            commonPeople.setMarried(odd);
+            Extention extention = new Extention();
+            commonPeople.setExtention(extention);
+            extention.setName1("name1" + index);
+            List<Integer> list = new LinkedList<>();
+            for (int j = 0; j < 10; j++) {
+                list.add(j * 20);
+            }
+            extention.setAge1(list);
+            excelBuilder.append(commonPeople);
         }
-        futures.forEach(CompletableFuture::join);
     }
 
     private List<CommonPeople> dataList() {
@@ -288,12 +326,13 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
             boolean odd = i % 2 == 0;
             commonPeople.setName(odd ? "张三" : "李四");
             commonPeople.setAge(odd ? 18 : 24);
-            commonPeople.setDance(odd ? true : false);
+            commonPeople.setDance(odd);
             commonPeople.setMoney(odd ? oddMoney : evenMoney);
             commonPeople.setBirthday(new Date());
             commonPeople.setLocalDate(LocalDate.now());
             commonPeople.setLocalDateTime(LocalDateTime.now());
             commonPeople.setCats(100L);
+            commonPeople.setMarried(odd);
             result.add(commonPeople);
         }
         return result;
@@ -307,7 +346,7 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
             boolean odd = i % 2 == 0;
             customStylePeople.setName(odd ? "张三" : "李四");
             customStylePeople.setAge(odd ? 18 : 24);
-            customStylePeople.setDance(odd ? true : false);
+            customStylePeople.setDance(odd);
             customStylePeople.setMoney(odd ? oddMoney : evenMoney);
             excelBuilder.append(customStylePeople);
         }
@@ -321,7 +360,7 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
             boolean odd = i % 2 == 0;
             oddEvenStylePeople.setName(odd ? "张三" : "李四");
             oddEvenStylePeople.setAge(odd ? 18 : 24);
-            oddEvenStylePeople.setDance(odd ? true : false);
+            oddEvenStylePeople.setDance(odd);
             oddEvenStylePeople.setMoney(odd ? oddMoney : evenMoney);
             excelBuilder.append(oddEvenStylePeople);
         }
@@ -335,7 +374,7 @@ class DefaultStreamExcelBuilderTest extends BasicTest {
             boolean odd = i % 2 == 0;
             oddEvenStylePeople.setName(odd ? "张三" : "李四");
             oddEvenStylePeople.setAge(odd ? 18 : 24);
-            oddEvenStylePeople.setDance(odd ? true : false);
+            oddEvenStylePeople.setDance(odd);
             oddEvenStylePeople.setMoney(odd ? oddMoney : evenMoney);
             excelBuilder.append(oddEvenStylePeople);
         }

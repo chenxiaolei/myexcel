@@ -14,10 +14,11 @@
  */
 package com.github.liaochong.myexcel.core;
 
-import org.apache.poi.ss.util.CellReference;
-import org.apache.poi.xssf.usermodel.XSSFComment;
+import com.github.liaochong.myexcel.core.context.Hyperlink;
+import org.apache.poi.ss.util.CellAddress;
 import org.slf4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -30,50 +31,41 @@ public class XSSFSaxReadHandler<T> extends AbstractReadHandler<T> implements XSS
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(XSSFSaxReadHandler.class);
     private int count;
-    /**
-     * blank row count
-     */
-    private int blankCount;
-    /**
-     * is blank row
-     */
-    private boolean isBlank;
+    private final XSSFSheetPreXMLHandler.XSSFPreData xssfPreData;
 
     public XSSFSaxReadHandler(
             List<T> result,
-            SaxExcelReader.ReadConfig<T> readConfig) {
-        super(false, result, readConfig);
+            SaxExcelReader.ReadConfig<T> readConfig, XSSFSheetPreXMLHandler.XSSFPreData xssfPreData) {
+        super(false, result, readConfig, xssfPreData != null ? xssfPreData.mergeCellMapping : Collections.emptyMap());
+        this.xssfPreData = xssfPreData;
     }
 
     @Override
-    public void startRow(int rowNum) {
-        newRow(rowNum);
-        isBlank = true;
+    public void startRow(int rowNum, boolean newInstance) {
+        newRow(rowNum, newInstance);
     }
 
     @Override
     public void endRow(int rowNum) {
-        if (isBlank) {
-            blankCount++;
-            return;
-        }
         handleResult();
         count++;
     }
 
     @Override
-    public void cell(String cellReference, String formattedValue,
-                     XSSFComment comment) {
-        isBlank = false;
-        if (cellReference == null) {
-            return;
+    public void cell(CellAddress cellAddress, String formattedValue) {
+        if (xssfPreData != null) {
+            Hyperlink hyperlink = xssfPreData.hyperlinkMapping.get(cellAddress);
+            if (hyperlink != null) {
+                hyperlink.setLabel(formattedValue);
+            }
+            this.readContext.setHyperlink(hyperlink);
         }
-        int thisCol = (new CellReference(cellReference)).getCol();
+        int thisCol = cellAddress.getColumn();
         handleField(thisCol, formattedValue);
     }
 
     @Override
     public void endSheet() {
-        log.info("Import completed, total number of rows {},{} blank rows filtered.", count, blankCount);
+        log.info("Import completed, total number of rows {}.", count);
     }
 }

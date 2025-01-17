@@ -34,9 +34,11 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -53,7 +55,7 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
     /**
      * 设置需要渲染的数据的类类型
      */
-    private Class<T> dataType;
+    private final Class<T> dataType;
     /**
      * 流工厂
      */
@@ -150,36 +152,13 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
         return of(dataType, TempFileOperator.convertToFile(excelInputStream));
     }
 
-    /**
-     * 已过时，请使用of方法代替
-     * 4.0版本移除
-     *
-     * @return DefaultStreamExcelBuilder
-     */
-    @Deprecated
-    public static DefaultStreamExcelBuilder<Map> getInstance() {
-        return new DefaultStreamExcelBuilder<>(Map.class);
-    }
-
-    /**
-     * 已过时，请使用of方法代替
-     * 4.0版本移除
-     *
-     * @param workbook 工作簿
-     * @return DefaultStreamExcelBuilder
-     */
-    @Deprecated
-    public static DefaultStreamExcelBuilder<Map> getInstance(Workbook workbook) {
-        return new DefaultStreamExcelBuilder<>(Map.class, workbook);
-    }
-
     public DefaultStreamExcelBuilder<T> titles(List<String> titles) {
         this.titles = titles;
         return this;
     }
 
     public DefaultStreamExcelBuilder<T> sheetName(String sheetName) {
-        configuration.setSheetName(sheetName);
+        configuration.sheetName = sheetName;
         return this;
     }
 
@@ -192,15 +171,10 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
         if (workbook != null) {
             throw new IllegalArgumentException("Workbook type confirmed, not modifiable");
         }
-        configuration.setWorkbookType(workbookType);
+        configuration.workbookType = workbookType;
         return this;
     }
 
-    /**
-     * 设置为无样式
-     *
-     * @return DefaultStreamExcelBuilder
-     */
     public DefaultStreamExcelBuilder<T> noStyle() {
         this.styleParser.setNoStyle(true);
         return this;
@@ -279,14 +253,9 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
         return this;
     }
 
-    @Deprecated
-    public DefaultStreamExcelBuilder<T> globalStyle(String... styles) {
-        return style(styles);
-    }
-
     public DefaultStreamExcelBuilder<T> style(String... styles) {
         this.styleParser.setNoStyle(false);
-        configuration.setStyle(Arrays.stream(styles).collect(Collectors.toSet()));
+        configuration.style = Arrays.stream(styles).collect(Collectors.toSet());
         return this;
     }
 
@@ -295,7 +264,7 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
         return this;
     }
 
-    public DefaultStreamExcelBuilder<T> startSheet(Consumer<Sheet> startSheetConsumer) {
+    public DefaultStreamExcelBuilder<T> onStartSheet(Consumer<Sheet> startSheetConsumer) {
         this.context.startSheetConsumer = startSheetConsumer;
         return this;
     }
@@ -306,12 +275,37 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
     }
 
     public DefaultStreamExcelBuilder<T> titleRowHeight(int titleRowHeight) {
-        this.configuration.setTitleRowHeight(titleRowHeight);
+        this.configuration.titleRowHeight = titleRowHeight;
         return this;
     }
 
     public DefaultStreamExcelBuilder<T> rowHeight(int rowHeight) {
-        this.configuration.setRowHeight(rowHeight);
+        this.configuration.rowHeight = rowHeight;
+        return this;
+    }
+
+    public DefaultStreamExcelBuilder<T> binding(Object... applicationBeans) {
+        this.binding(new HashSet<>(Arrays.asList(applicationBeans)));
+        return this;
+    }
+
+    public DefaultStreamExcelBuilder<T> binding(Set<Object> applicationBeans) {
+        if (applicationBeans.isEmpty()) {
+            log.warn("binding application beans failure");
+            return this;
+        }
+        Map<Class<?>, Object> map = applicationBeans.stream().collect(Collectors.toMap(Object::getClass, b -> b));
+        this.configuration.applicationBeans = map;
+        return this;
+    }
+
+    public DefaultStreamExcelBuilder<T> autoMerge() {
+        this.configuration.autoMerge = true;
+        return this;
+    }
+
+    public DefaultStreamExcelBuilder<T> nameManager(Map<String, List<?>> nameMapping) {
+        this.configuration.nameMapping = nameMapping;
         return this;
     }
 
@@ -330,17 +324,18 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
         }
         context.styleParser = styleParser;
         htmlToExcelStreamFactory = new HtmlToExcelStreamFactory(context);
-        htmlToExcelStreamFactory.widthStrategy(configuration.getWidthStrategy());
+        htmlToExcelStreamFactory.widthStrategy(configuration.widthStrategy);
+        htmlToExcelStreamFactory.nameManager(configuration.nameMapping);
         if (workbook == null) {
-            htmlToExcelStreamFactory.workbookType(configuration.getWorkbookType());
+            htmlToExcelStreamFactory.workbookType(configuration.workbookType);
         }
         Table table = this.createTable();
-        htmlToExcelStreamFactory.start(table, workbook);
-
         List<Tr> head = this.createThead();
         if (head != null) {
             htmlToExcelStreamFactory.appendTitles(head);
         }
+        htmlToExcelStreamFactory.start(table, workbook);
+
         if (excel != null && Files.exists(excel)) {
             log.info("start reading existing excel data.");
             SaxExcelReader<T> reader = SaxExcelReader.of(dataType)
@@ -377,12 +372,23 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
         if (data == null) {
             return;
         }
-        List<Pair<? extends Class, ?>> contents;
         if (isMapBuild) {
-            contents = assemblingMapContents((Map<String, Object>) data);
-        } else {
-            contents = getRenderContent(data, filteredFields);
+            List<Pair<? extends Class, ?>> contents = assemblingMapContents((Map<String, Object>) data);
+            this.appendTr(contents);
+            return;
         }
+        if (hasMultiColumn) {
+            List<List<Pair<? extends Class, ?>>> contents = this.getMultiRenderContent(data, filteredFields);
+            for (List<Pair<? extends Class, ?>> content : contents) {
+                this.appendTr(content);
+            }
+        } else {
+            List<Pair<? extends Class, ?>> contents = this.getOriginalRenderContent(data, filteredFields);
+            this.appendTr(contents);
+        }
+    }
+
+    private void appendTr(List<Pair<? extends Class, ?>> contents) {
         Tr tr = this.createTr(contents);
         htmlToExcelStreamFactory.append(tr);
     }
@@ -470,7 +476,7 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
     private <E> void doAppend(Map<String, E> renderData) {
         List<Table> tables;
         try {
-            tables = templateHandler.render(renderData, new ParseConfig(configuration.getWidthStrategy()));
+            tables = templateHandler.render(renderData, new ParseConfig(configuration.widthStrategy));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -478,7 +484,7 @@ public class DefaultStreamExcelBuilder<T> extends AbstractSimpleExcelBuilder imp
             return;
         }
         for (Table table : tables) {
-            table.getTrList().forEach(htmlToExcelStreamFactory::append);
+            table.trList.forEach(htmlToExcelStreamFactory::append);
         }
     }
 

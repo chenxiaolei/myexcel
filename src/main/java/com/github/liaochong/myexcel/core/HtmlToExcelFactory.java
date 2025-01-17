@@ -18,8 +18,8 @@ package com.github.liaochong.myexcel.core;
 import com.github.liaochong.myexcel.core.parser.HtmlTableParser;
 import com.github.liaochong.myexcel.core.parser.ParseConfig;
 import com.github.liaochong.myexcel.core.parser.Table;
-import com.github.liaochong.myexcel.core.parser.Td;
 import com.github.liaochong.myexcel.core.parser.Tr;
+import com.github.liaochong.myexcel.core.strategy.SheetStrategy;
 import com.github.liaochong.myexcel.core.strategy.WidthStrategy;
 import com.github.liaochong.myexcel.utils.StringUtil;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -30,6 +30,7 @@ import org.slf4j.Logger;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -164,14 +165,31 @@ public class HtmlToExcelFactory extends AbstractExcelFactory {
         }
         this.initCellStyle(workbook);
         // 2、处理解析表格
+        if (SheetStrategy.isMultiSheet(sheetStrategy)) {
+            buildTablesWithMultiSheet(tables);
+        } else {
+            buildTablesWithOneSheet(tables);
+        }
+        // 3.创建名称管理
+        this.createNameManager();
+        log.info("Build excel takes {} ms", System.currentTimeMillis() - startTime);
+        return workbook;
+    }
+
+    /**
+     * MultiSheet 策略
+     *
+     * @param tables tables
+     */
+    private void buildTablesWithMultiSheet(List<Table> tables) {
         for (int i = 0, size = tables.size(); i < size; i++) {
             Table table = tables.get(i);
-            String sheetName = this.getRealSheetName(table.getCaption());
+            String sheetName = this.getRealSheetName(table.caption);
             Sheet sheet = workbook.getSheet(sheetName);
             if (sheet == null) {
                 sheet = workbook.createSheet(sheetName);
             }
-            boolean hasTd = table.getTrList().stream().map(Tr::getTdList).anyMatch(list -> !list.isEmpty());
+            boolean hasTd = table.trList.stream().map(tr -> tr.tdList).anyMatch(list -> !list.isEmpty());
             if (!hasTd) {
                 continue;
             }
@@ -181,8 +199,43 @@ public class HtmlToExcelFactory extends AbstractExcelFactory {
             // 移除table
             tables.set(i, null);
         }
-        log.info("Build excel takes {} ms", System.currentTimeMillis() - startTime);
-        return workbook;
+    }
+
+    /**
+     * oneSheet 策略
+     *
+     * @param tables tables
+     */
+    private void buildTablesWithOneSheet(List<Table> tables) {
+        String sheetName = this.getRealSheetName(tables.get(0).caption);
+        Sheet sheet = workbook.getSheet(sheetName);
+        if (sheet == null) {
+            sheet = workbook.createSheet(sheetName);
+        }
+        // 修改非首个table下的index
+        if (tables.size() > 1) {
+            List<Tr> trList = tables.get(0).trList;
+            int lastRowNum = 0;
+            if (!trList.isEmpty()) {
+                lastRowNum = trList.get(trList.size() - 1).index;
+            }
+            for (int i = 1; i < tables.size(); i++) {
+                for (Tr tr : tables.get(i).trList) {
+                    this.updateTrIndex(tr, ++lastRowNum);
+                    trList.add(tr);
+                }
+                // 移除table
+                tables.set(i, null);
+            }
+        }
+        Table table = tables.get(0);
+        boolean hasTd = table.trList.stream().map(tr -> tr.tdList).anyMatch(list -> !list.isEmpty());
+        if (!hasTd) {
+            return;
+        }
+        // 设置单元格样式
+        this.setTdOfTable(table, sheet);
+        this.freezePane(0, sheet);
     }
 
     /**
@@ -190,20 +243,31 @@ public class HtmlToExcelFactory extends AbstractExcelFactory {
      */
     private void setTdOfTable(Table table, Sheet sheet) {
         int maxColIndex = 0;
-        if (WidthStrategy.isAutoWidth(widthStrategy) && !table.getTrList().isEmpty()) {
-            maxColIndex = table.getTrList().parallelStream()
-                    .mapToInt(tr -> tr.getTdList().stream().mapToInt(Td::getCol).max().orElse(0))
+        if (WidthStrategy.isAutoWidth(widthStrategy) && !table.trList.isEmpty()) {
+            maxColIndex = table.trList.parallelStream()
+                    .mapToInt(tr -> tr.tdList.stream().mapToInt(td -> td.col).max().orElse(0))
                     .max()
                     .orElse(0);
         }
-        Map<Integer, Integer> colMaxWidthMap = this.getColMaxWidthMap(table.getTrList());
-        for (int i = 0, size = table.getTrList().size(); i < size; i++) {
-            Tr tr = table.getTrList().get(i);
-            this.createRow(tr, sheet);
-            tr.setTdList(null);
-        }
-        table.setTrList(null);
+        Map<Integer, Integer> colMaxWidthMap = this.getColMaxWidthMap(table.trList);
         this.setColWidth(colMaxWidthMap, sheet, maxColIndex);
+        for (int i = 0, size = table.trList.size(); i < size; i++) {
+            Tr tr = table.trList.get(i);
+            this.createRow(tr, sheet);
+            tr.tdList = null;
+        }
+        stagingTds = new LinkedList<>();
+        table.trList = null;
     }
 
+    /**
+     * 为 oneSheet 策略更新 tr,td 的 rowIndex
+     *
+     * @param tr                当前tr
+     * @param sheetLastRowIndex sheet 最后行下标
+     */
+    private void updateTrIndex(Tr tr, int sheetLastRowIndex) {
+        tr.index = sheetLastRowIndex;
+        tr.tdList.forEach(td -> td.row = tr.index);
+    }
 }

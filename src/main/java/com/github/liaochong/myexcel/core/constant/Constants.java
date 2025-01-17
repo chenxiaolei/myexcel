@@ -14,6 +14,10 @@
  */
 package com.github.liaochong.myexcel.core.constant;
 
+import com.github.liaochong.myexcel.core.container.Pair;
+
+import javax.lang.model.type.NullType;
+
 /**
  * 常量集合
  *
@@ -36,6 +40,10 @@ public class Constants {
 
     public static final String HTML_SUFFIX = ".html";
 
+    public static final String HTTP = "http";
+
+    public static final String DATA = "data";
+
     public static final String COMMA = ",";
 
     public static final String QUOTES = "\"";
@@ -53,4 +61,18 @@ public class Constants {
     public static final String RIGHT_BRACKET = ")";
 
     public static final String EQUAL = "=";
+
+    public static final String DEFAULT_DATE_FORMAT = "yyyy-MM-dd";
+
+    public static final String DEFAULT_DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
+
+    public static final String DEFAULT_LOCAL_TIME_FORMAT = "HH:mm:ss";
+
+    public static final Pair<Class, Object> NULL_PAIR = Pair.of(NullType.class, null);
+
+    public static final String ATTRIBUTE_REF = "ref";
+
+    public static final String ATTRIBUTE_LOCATION = "location";
+
+    public static final String ATTRIBUTE_RID = "r:id";
 }

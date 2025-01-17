@@ -1,0 +1,78 @@
+/*
+ * Copyright 2019 liaochong
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.github.liaochong.myexcel.utils;
+
+import java.beans.PropertyDescriptor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.List;
+
+/**
+ * @author liaochong
+ * @version 1.0
+ */
+public class FieldDefinition {
+
+    private Field field;
+
+    private List<Field> parentFields;
+
+    private Method getMethod;
+
+    private Method setMethod;
+
+    public FieldDefinition(Field field) {
+        this.field = field;
+        try {
+            PropertyDescriptor propertyDescriptor = new PropertyDescriptor(field.getName(), field.getDeclaringClass());
+            this.getMethod = propertyDescriptor.getReadMethod();
+            this.setMethod = propertyDescriptor.getWriteMethod();
+        } catch (Exception e) {
+            // do nothing
+        }
+    }
+
+    public Field getField() {
+        return field;
+    }
+
+    public void setField(Field field) {
+        this.field = field;
+    }
+
+    public List<Field> getParentFields() {
+        return parentFields;
+    }
+
+    public void setParentFields(List<Field> parentFields) {
+        this.parentFields = parentFields;
+    }
+
+    public Method getGetMethod() {
+        return getMethod;
+    }
+
+    public void setGetMethod(Method getMethod) {
+        this.getMethod = getMethod;
+    }
+
+    public Method getSetMethod() {
+        return setMethod;
+    }
+
+    public void setSetMethod(Method setMethod) {
+        this.setMethod = setMethod;
+    }
+}

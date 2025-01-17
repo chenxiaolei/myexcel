@@ -16,7 +16,6 @@ package com.github.liaochong.myexcel.core.cache;
 
 import com.github.liaochong.myexcel.utils.RegexpUtil;
 import com.github.liaochong.myexcel.utils.TempFileOperator;
-import sun.nio.ch.FileChannelImpl;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -48,14 +47,10 @@ public class StringsCache implements Cache<Integer, String> {
     private static final int MAX_SIZE_PATH = 1000;
 
     private static final int MAX_PATH = 5;
-    /**
-     * mmap cleaner method
-     */
-    private static Method clearMethod;
 
-    private List<Path> cacheFiles = new ArrayList<>();
+    private final List<Path> cacheFiles = new ArrayList<>();
 
-    private LinkedHashMap<Integer, String[]> activeCache = new LinkedHashMap<Integer, String[]>(MAX_PATH, 0.75F, true) {
+    private final LinkedHashMap<Integer, String[]> activeCache = new LinkedHashMap<Integer, String[]>(MAX_PATH, 0.75F, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry eldest) {
             return size() > MAX_PATH;
@@ -68,25 +63,23 @@ public class StringsCache implements Cache<Integer, String> {
 
     private int index;
 
-    static {
-        try {
-            clearMethod = FileChannelImpl.class.getDeclaredMethod("unmap", MappedByteBuffer.class);
-            clearMethod.setAccessible(true);
-        } catch (NoSuchMethodException e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
     public void init(int stringCount) {
         if (stringCount == 0) {
             return;
         }
-        cacheValues = new String[stringCount > MAX_SIZE_PATH ? MAX_SIZE_PATH : stringCount];
+        cacheValues = new String[Math.min(stringCount, MAX_SIZE_PATH)];
     }
 
     @Override
     public void cache(Integer key, String value) {
-        cacheValues[key - (key / MAX_SIZE_PATH * MAX_SIZE_PATH)] = value;
+        int cacheIndex = key - (key / MAX_SIZE_PATH * MAX_SIZE_PATH);
+        // 存在部分情况下，count与实际不一致
+        if (cacheIndex >= cacheValues.length) {
+            String[] resizeCache = new String[MAX_SIZE_PATH];
+            System.arraycopy(cacheValues, 0, resizeCache, 0, cacheValues.length);
+            cacheValues = resizeCache;
+        }
+        cacheValues[cacheIndex] = value;
         totalCount++;
         if ((key + 1) % MAX_SIZE_PATH == 0) {
             if (index == 0) {
@@ -130,9 +123,14 @@ public class StringsCache implements Cache<Integer, String> {
         } finally {
             if (mbb != null) {
                 try {
-                    clearMethod.invoke(FileChannelImpl.class, mbb);
+                    Method getCleanerMethod = mbb.getClass().getMethod("cleaner");
+                    getCleanerMethod.setAccessible(true);
+                    Object cleaner = getCleanerMethod.invoke(mbb);
+                    Method clean = cleaner.getClass().getMethod("clean");
+                    clean.setAccessible(true);
+                    clean.invoke(cleaner);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    // do nothing
                 }
             }
         }

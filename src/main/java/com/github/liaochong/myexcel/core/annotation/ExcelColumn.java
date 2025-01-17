@@ -17,6 +17,8 @@ package com.github.liaochong.myexcel.core.annotation;
 
 import com.github.liaochong.myexcel.core.constant.FileType;
 import com.github.liaochong.myexcel.core.constant.LinkType;
+import com.github.liaochong.myexcel.core.converter.CustomWriteConverter;
+import com.github.liaochong.myexcel.core.converter.DefaultCustomWriteConverter;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
@@ -128,6 +130,13 @@ public @interface ExcelColumn {
     String mapping() default "";
 
     /**
+     * 写转化器
+     *
+     * @return 映射提供者
+     */
+    Class<? extends CustomWriteConverter> writeConverter() default DefaultCustomWriteConverter.class;
+
+    /**
      * 文件类型
      *
      * @return 文件类型
@@ -140,4 +149,25 @@ public @interface ExcelColumn {
      * @return true/false
      */
     boolean formula() default false;
+
+    /**
+     * 提示语
+     *
+     * @return 提示语
+     */
+    Prompt prompt() default @Prompt();
+
+    /**
+     * 图片相关配置
+     *
+     * @return 图片配置
+     */
+    Image image() default @Image();
+
+    /**
+     * 下拉列表配置
+     *
+     * @return 下拉列表配置
+     */
+    DropdownList dropdownList() default @DropdownList;
 }

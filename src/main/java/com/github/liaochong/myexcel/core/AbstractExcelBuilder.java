@@ -16,6 +16,7 @@
 package com.github.liaochong.myexcel.core;
 
 import com.github.liaochong.myexcel.core.strategy.AutoWidthStrategy;
+import com.github.liaochong.myexcel.core.strategy.SheetStrategy;
 import com.github.liaochong.myexcel.core.strategy.WidthStrategy;
 import com.github.liaochong.myexcel.core.templatehandler.TemplateHandler;
 import com.github.liaochong.myexcel.exception.ExcelBuildException;
@@ -23,6 +24,7 @@ import com.github.liaochong.myexcel.utils.ReflectUtil;
 import org.apache.poi.ss.usermodel.Workbook;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -39,6 +41,7 @@ public abstract class AbstractExcelBuilder implements ExcelBuilder {
 
     protected AbstractExcelBuilder(Class<? extends TemplateHandler> templateHandlerClass) {
         widthStrategy(WidthStrategy.COMPUTE_AUTO_WIDTH);
+        sheetStrategy(SheetStrategy.MULTI_SHEET);
         this.templateHandler = ReflectUtil.newInstance(templateHandlerClass);
     }
 
@@ -51,6 +54,12 @@ public abstract class AbstractExcelBuilder implements ExcelBuilder {
     @Override
     public AbstractExcelBuilder useDefaultStyle() {
         htmlToExcelFactory.useDefaultStyle();
+        return this;
+    }
+
+    @Override
+    public ExcelBuilder applyDefaultStyle() {
+        htmlToExcelFactory.applyDefaultStyle();
         return this;
     }
 
@@ -68,11 +77,23 @@ public abstract class AbstractExcelBuilder implements ExcelBuilder {
     }
 
     @Override
+    public AbstractExcelBuilder sheetStrategy(SheetStrategy sheetStrategy) {
+        htmlToExcelFactory.sheetStrategy(sheetStrategy);
+        return this;
+    }
+
+    @Override
     public AbstractExcelBuilder freezePanes(FreezePane... freezePanes) {
         if (freezePanes == null || freezePanes.length == 0) {
             return this;
         }
         htmlToExcelFactory.freezePanes(freezePanes);
+        return this;
+    }
+
+    @Override
+    public ExcelBuilder nameManager(Map<String, List<?>> nameMapping) {
+        htmlToExcelFactory.nameManager(nameMapping);
         return this;
     }
 

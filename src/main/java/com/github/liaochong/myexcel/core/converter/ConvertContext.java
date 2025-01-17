@@ -12,8 +12,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.github.liaochong.myexcel.core;
+package com.github.liaochong.myexcel.core.converter;
 
+import com.github.liaochong.myexcel.core.Configuration;
+import com.github.liaochong.myexcel.core.ExcelColumnMapping;
 import com.github.liaochong.myexcel.core.constant.AllConverter;
 import com.github.liaochong.myexcel.core.constant.CsvConverter;
 
@@ -29,53 +31,21 @@ public class ConvertContext {
     /**
      * {@link com.github.liaochong.myexcel.core.annotation.ExcelModel} setting
      */
-    private Configuration configuration = new Configuration();
+    public Configuration configuration = new Configuration();
 
     /**
      * {@link com.github.liaochong.myexcel.core.annotation.ExcelColumn} mapping
      */
-    private Map<Field, ExcelColumnMapping> excelColumnMappingMap = new HashMap<>();
+    public Map<Field, ExcelColumnMapping> excelColumnMappingMap = new HashMap<>();
     /**
      * csv or excel
      */
-    private Class converterType;
+    public Class converterType;
 
-    private boolean isConvertCsv;
+    public boolean isConvertCsv;
 
     public ConvertContext(boolean isConvertCsv) {
         this.isConvertCsv = isConvertCsv;
         this.converterType = isConvertCsv ? CsvConverter.class : AllConverter.class;
-    }
-
-    public Configuration getConfiguration() {
-        return this.configuration;
-    }
-
-    public Map<Field, ExcelColumnMapping> getExcelColumnMappingMap() {
-        return this.excelColumnMappingMap;
-    }
-
-    public Class getConverterType() {
-        return this.converterType;
-    }
-
-    public boolean isConvertCsv() {
-        return this.isConvertCsv;
-    }
-
-    public void setConfiguration(Configuration configuration) {
-        this.configuration = configuration;
-    }
-
-    public void setExcelColumnMappingMap(Map<Field, ExcelColumnMapping> excelColumnMappingMap) {
-        this.excelColumnMappingMap = excelColumnMappingMap;
-    }
-
-    public void setConverterType(Class converterType) {
-        this.converterType = converterType;
-    }
-
-    public void setConvertCsv(boolean isConvertCsv) {
-        this.isConvertCsv = isConvertCsv;
     }
 }

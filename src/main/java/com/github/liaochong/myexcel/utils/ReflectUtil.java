@@ -16,18 +16,24 @@
 package com.github.liaochong.myexcel.utils;
 
 import com.github.liaochong.myexcel.core.annotation.ExcelColumn;
+import com.github.liaochong.myexcel.core.annotation.MultiColumn;
 import com.github.liaochong.myexcel.core.cache.WeakCache;
+import com.github.liaochong.myexcel.core.converter.ReadConverterContext;
 import com.github.liaochong.myexcel.core.reflect.ClassFieldContainer;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,7 +45,7 @@ import java.util.stream.Collectors;
  */
 public final class ReflectUtil {
 
-    private static final WeakCache<Class<?>, Map<Integer, Field>> FIELD_CACHE = new WeakCache<>();
+    private static final WeakCache<Class<?>, Map<Integer, FieldDefinition>> FIELD_CACHE = new WeakCache<>();
 
     private static final WeakCache<Class<?>, Map<String, Field>> TITLE_FIELD_CACHE = new WeakCache<>();
 
@@ -55,41 +61,127 @@ public final class ReflectUtil {
         return container;
     }
 
-    public static Map<Integer, Field> getFieldMapOfExcelColumn(Class<?> dataType) {
+    public static List<FieldDefinition> getWriteFieldDefinitionsOfExcelColumn(Class<?> dataType) {
+        if (dataType == Map.class) {
+            return Collections.emptyList();
+        }
+        List<FieldDefinition> fieldDefinitions = new ArrayList<>();
+        getWriteFieldDefinition(dataType, fieldDefinitions, null, 0);
+        return fieldDefinitions;
+    }
+
+    private static void getWriteFieldDefinition(Class<?> dataType, List<FieldDefinition> fieldDefinitions, List<Field> parentFields, int level) {
+        ClassFieldContainer classFieldContainer = ReflectUtil.getAllFieldsOfClass(dataType);
+        List<FieldDefinition> fields = classFieldContainer.getFieldsByAnnotation(ExcelColumn.class, MultiColumn.class);
+        if (level == 0 && fields.isEmpty()) {
+            // If no field contains an ExcelColumn annotation, all fields are read in the default order
+            List<FieldDefinition> allFields = classFieldContainer.getFields();
+            for (int i = 0, size = allFields.size(); i < size; i++) {
+                fieldDefinitions.add(allFields.get(i));
+            }
+        } else {
+            List<Field> topParentFields = new LinkedList<>();
+            if (parentFields != null) {
+                topParentFields.addAll(parentFields);
+            }
+            for (FieldDefinition fieldDefinition : fields) {
+                if (level == 0) {
+                    parentFields = new LinkedList<>();
+                }
+                Field field = fieldDefinition.getField();
+                if (field.isAnnotationPresent(MultiColumn.class)) {
+                    MultiColumn multiColumn = field.getAnnotation(MultiColumn.class);
+                    List<Field> childrenParentFields = new LinkedList<>(topParentFields);
+                    childrenParentFields.add(field);
+                    if (ReadConverterContext.support(multiColumn.classType())) {
+                        field.setAccessible(true);
+                        fieldDefinition = new FieldDefinition(field);
+                        fieldDefinition.setParentFields(parentFields.isEmpty() ? Collections.emptyList() : parentFields);
+                        fieldDefinitions.add(fieldDefinition);
+                    } else {
+                        getWriteFieldDefinition(multiColumn.classType(), fieldDefinitions, childrenParentFields, level + 1);
+                    }
+                } else {
+                    field.setAccessible(true);
+                    fieldDefinition = new FieldDefinition(field);
+                    fieldDefinition.setParentFields(parentFields.isEmpty() ? Collections.emptyList() : parentFields);
+                    fieldDefinitions.add(fieldDefinition);
+                }
+            }
+        }
+    }
+
+    public static Map<Integer, FieldDefinition> getFieldDefinitionMapOfExcelColumn(Class<?> dataType) {
         if (dataType == Map.class) {
             return Collections.emptyMap();
         }
-        Map<Integer, Field> fieldMap = FIELD_CACHE.get(dataType);
+        Map<Integer, FieldDefinition> fieldMap = FIELD_CACHE.get(dataType);
         if (fieldMap != null) {
             return fieldMap;
         }
-        ClassFieldContainer classFieldContainer = ReflectUtil.getAllFieldsOfClass(dataType);
-        List<Field> fields = classFieldContainer.getFieldsByAnnotation(ExcelColumn.class);
-        if (fields.isEmpty()) {
-            // If no field contains an ExcelColumn annotation, all fields are read in the default order
-            List<Field> allFields = classFieldContainer.getFields();
-            fieldMap = new HashMap<>(allFields.size());
-            for (int i = 0, size = allFields.size(); i < size; i++) {
-                fieldMap.put(i, allFields.get(i));
-            }
-        } else {
-            fieldMap = new HashMap<>(fields.size());
-            for (Field field : fields) {
-                ExcelColumn excelColumn = field.getAnnotation(ExcelColumn.class);
-                int index = excelColumn.index();
-                if (index < 0) {
-                    continue;
-                }
-                Field f = fieldMap.get(index);
-                if (Objects.nonNull(f)) {
-                    throw new IllegalStateException("Index cannot be repeated: " + index + ". Please check it.");
-                }
-                field.setAccessible(true);
-                fieldMap.put(index, field);
-            }
-        }
+        fieldMap = new HashMap<>();
+        getFieldDefinition(dataType, fieldMap, null, 0);
         FIELD_CACHE.cache(dataType, fieldMap);
         return fieldMap;
+    }
+
+    private static void getFieldDefinition(Class<?> dataType, Map<Integer, FieldDefinition> fieldDefinitionMap, List<Field> parentFields, int level) {
+        ClassFieldContainer classFieldContainer = ReflectUtil.getAllFieldsOfClass(dataType);
+        List<FieldDefinition> fields = classFieldContainer.getFieldsByAnnotation(ExcelColumn.class, MultiColumn.class);
+        if (level == 0 && fields.isEmpty()) {
+            // If no field contains an ExcelColumn annotation, all fields are read in the default order
+            List<FieldDefinition> allFields = classFieldContainer.getFields();
+            for (int i = 0, size = allFields.size(); i < size; i++) {
+                fieldDefinitionMap.put(i, allFields.get(i));
+            }
+        } else {
+            List<Field> topParentFields = new LinkedList<>();
+            if (parentFields != null) {
+                topParentFields.addAll(parentFields);
+            }
+            for (FieldDefinition fieldDefinition : fields) {
+                if (level == 0) {
+                    parentFields = new LinkedList<>();
+                }
+                Field field = fieldDefinition.getField();
+                if (field.isAnnotationPresent(MultiColumn.class)) {
+                    MultiColumn multiColumn = field.getAnnotation(MultiColumn.class);
+                    List<Field> childrenParentFields = new LinkedList<>(topParentFields);
+                    childrenParentFields.add(field);
+                    if (ReadConverterContext.support(multiColumn.classType())) {
+                        ExcelColumn excelColumn = field.getAnnotation(ExcelColumn.class);
+                        int index = excelColumn.index();
+                        if (index < 0) {
+                            continue;
+                        }
+                        FieldDefinition definition = fieldDefinitionMap.get(index);
+                        if (Objects.nonNull(definition)) {
+                            throw new IllegalStateException("Index cannot be repeated: " + index + ". Please check it.");
+                        }
+                        field.setAccessible(true);
+                        fieldDefinition = new FieldDefinition(field);
+                        fieldDefinition.setParentFields(parentFields.isEmpty() ? Collections.emptyList() : parentFields);
+                        fieldDefinitionMap.put(index, fieldDefinition);
+                    } else {
+                        getFieldDefinition(multiColumn.classType(), fieldDefinitionMap, childrenParentFields, level + 1);
+                    }
+                } else {
+                    ExcelColumn excelColumn = field.getAnnotation(ExcelColumn.class);
+                    int index = excelColumn.index();
+                    if (index < 0) {
+                        continue;
+                    }
+                    FieldDefinition definition = fieldDefinitionMap.get(index);
+                    if (Objects.nonNull(definition)) {
+                        throw new IllegalStateException("Index cannot be repeated: " + index + ". Please check it.");
+                    }
+                    field.setAccessible(true);
+                    fieldDefinition = new FieldDefinition(field);
+                    fieldDefinition.setParentFields(parentFields.isEmpty() ? Collections.emptyList() : parentFields);
+                    fieldDefinitionMap.put(index, fieldDefinition);
+                }
+            }
+        }
     }
 
     public static Map<String, Field> getFieldMapOfTitleExcelColumn(Class<?> dataType) {
@@ -101,12 +193,13 @@ public final class ReflectUtil {
             return fieldMap;
         }
         ClassFieldContainer classFieldContainer = ReflectUtil.getAllFieldsOfClass(dataType);
-        List<Field> fields = classFieldContainer.getFieldsByAnnotation(ExcelColumn.class);
+        List<FieldDefinition> fields = classFieldContainer.getFieldsByAnnotation(ExcelColumn.class);
         if (fields.isEmpty()) {
             throw new IllegalStateException("There is no field with @ExcelColumn");
         }
         fieldMap = new HashMap<>(fields.size());
-        for (Field field : fields) {
+        for (FieldDefinition fieldDefinition : fields) {
+            Field field = fieldDefinition.getField();
             ExcelColumn excelColumn = field.getAnnotation(ExcelColumn.class);
             String title = excelColumn.title();
             if (title.isEmpty()) {
@@ -126,16 +219,21 @@ public final class ReflectUtil {
     /**
      * 根据对象以及指定字段，获取字段的值
      *
-     * @param o     对象
-     * @param field 指定字段
+     * @param o               对象
+     * @param fieldDefinition 指定字段
      * @return 字段值
      */
-    public static Object getFieldValue(Object o, Field field) {
-        if (o == null || field == null) {
+    public static Object getFieldValue(Object o, FieldDefinition fieldDefinition) {
+        if (o == null || fieldDefinition == null) {
             return null;
         }
         try {
-            return field.get(o);
+            Method getMethod = fieldDefinition.getGetMethod();
+            if (getMethod != null) {
+                return getMethod.invoke(o);
+            } else {
+                return fieldDefinition.getField().get(o);
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -146,8 +244,9 @@ public final class ReflectUtil {
         Field[] fields = clazz.getDeclaredFields();
         for (Field field : fields) {
             field.setAccessible(true);
-            container.getDeclaredFields().add(field);
-            container.getFieldMap().put(field.getName(), field);
+            FieldDefinition fieldDefinition = new FieldDefinition(field);
+            container.getDeclaredFields().add(fieldDefinition);
+            container.getFieldMap().put(field.getName(), fieldDefinition);
         }
         if (clazz.getSuperclass() != null) {
             ClassFieldContainer parentContainer = new ClassFieldContainer();
@@ -171,12 +270,12 @@ public final class ReflectUtil {
     }
 
     public static boolean isDate(Class clazz) {
-        return clazz == Date.class || clazz == LocalDateTime.class || clazz == LocalDate.class;
+        return clazz == Date.class || clazz == LocalDateTime.class || clazz == LocalDate.class || clazz == LocalTime.class;
     }
 
-    public static int sortFields(Field field1, Field field2) {
-        ExcelColumn excelColumn1 = field1.getAnnotation(ExcelColumn.class);
-        ExcelColumn excelColumn2 = field2.getAnnotation(ExcelColumn.class);
+    public static int sortFields(FieldDefinition fieldDefinition1, FieldDefinition fieldDefinition2) {
+        ExcelColumn excelColumn1 = fieldDefinition1.getField().getAnnotation(ExcelColumn.class);
+        ExcelColumn excelColumn2 = fieldDefinition2.getField().getAnnotation(ExcelColumn.class);
         if (excelColumn1 == null && excelColumn2 == null) {
             return 0;
         }
@@ -195,11 +294,11 @@ public final class ReflectUtil {
         return order1 > order2 ? 1 : -1;
     }
 
-    public static boolean isFieldSelected(List<Class<?>> selectedGroupList, Field field) {
+    public static boolean isFieldSelected(List<Class<?>> selectedGroupList, FieldDefinition fieldDefinition) {
         if (selectedGroupList.isEmpty()) {
             return true;
         }
-        ExcelColumn excelColumn = field.getAnnotation(ExcelColumn.class);
+        ExcelColumn excelColumn = fieldDefinition.getField().getAnnotation(ExcelColumn.class);
         if (excelColumn == null) {
             return false;
         }
