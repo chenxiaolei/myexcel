@@ -18,6 +18,7 @@ package com.github.liaochong.myexcel.utils;
 import com.github.liaochong.myexcel.core.cache.Cache;
 import com.github.liaochong.myexcel.core.cache.WeakCache;
 
+import java.util.Arrays;
 import java.util.function.IntSupplier;
 import java.util.regex.Pattern;
 
@@ -58,9 +59,19 @@ public final class TdUtil {
         return digitalPattern.matcher(span).find();
     }
 
+    public static int getMultiLineStringWidth(String s) {
+        return getMultiLineStringWidth(s, 0);
+    }
+
     public static int getStringWidth(String s) {
         return getStringWidth(s, 0);
     }
+
+    public static int getMultiLineStringWidth(String s, double shift) {
+        String[] lines=s.split("\n");
+        return Arrays.stream(lines).map(line->getStringWidth(s,shift)).reduce(Integer::max).orElse(1);
+    }
+
 
     public static int getStringWidth(String s, double shift) {
         if (s == null) {

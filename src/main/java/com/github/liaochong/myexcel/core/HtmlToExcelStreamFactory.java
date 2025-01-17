@@ -56,7 +56,7 @@ import java.util.zip.ZipOutputStream;
  * @author liaochong
  * @version 1.0
  */
-class HtmlToExcelStreamFactory extends AbstractExcelFactory {
+public class HtmlToExcelStreamFactory extends AbstractExcelFactory {
 
     private static final Tr STOP_FLAG = new Tr(-1, 0);
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(HtmlToExcelStreamFactory.class);
@@ -271,7 +271,7 @@ class HtmlToExcelStreamFactory extends AbstractExcelFactory {
         return workbook;
     }
 
-    List<Path> buildAsPaths() {
+    public List<Path> buildAsPaths() {
         waiting();
         this.storeToTempFile();
         futures.forEach(CompletableFuture::join);
@@ -279,7 +279,7 @@ class HtmlToExcelStreamFactory extends AbstractExcelFactory {
         return tempFilePaths.stream().filter(path -> Objects.nonNull(path) && path.toFile().exists()).collect(Collectors.toList());
     }
 
-    protected void waiting() {
+    public void waiting() {
         if (exception) {
             throw new IllegalStateException("An exception occurred while processing");
         }
@@ -402,7 +402,7 @@ class HtmlToExcelStreamFactory extends AbstractExcelFactory {
         this.createRow(tr, sheet);
     }
 
-    Path buildAsZip(String fileName) {
+    public Path buildAsZip(String fileName) {
         waiting();
         this.storeToTempFile();
         futures.forEach(CompletableFuture::join);
@@ -442,32 +442,32 @@ class HtmlToExcelStreamFactory extends AbstractExcelFactory {
     /**
      * 上下文
      */
-    static class HtmlToExcelStreamFactoryContext {
+    public static class HtmlToExcelStreamFactoryContext {
 
-        BlockingQueue<Tr> trWaitQueue = new LinkedBlockingQueue<>(Math.max(Runtime.getRuntime().availableProcessors() * 10, 100));
+        public BlockingQueue<Tr> trWaitQueue = new LinkedBlockingQueue<>(Math.max(Runtime.getRuntime().availableProcessors() * 10, 100));
         /**
          * 线程池
          */
-        ExecutorService executorService;
+        public ExecutorService executorService;
         /**
          * 文件分割,excel容量
          */
-        int capacity;
+        public int capacity;
 
-        Consumer<Path> pathConsumer;
+        public Consumer<Path> pathConsumer;
         /**
          * 是否固定标题
          */
-        boolean fixedTitles;
+        public boolean fixedTitles;
 
-        StyleParser styleParser;
+        public StyleParser styleParser;
 
         /**
          * sheet前置处理函数
          */
-        Consumer<Sheet> startSheetConsumer = sheet -> {
+        public Consumer<Sheet> startSheetConsumer = sheet -> {
         };
 
-        FreezePane freezePane;
+        public FreezePane freezePane;
     }
 }

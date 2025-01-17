@@ -152,6 +152,7 @@ public class HtmlTableParser {
             Tr tr = new Tr(index, TdUtil.getValue(height), true);
             // 行可见性
             tr.visibility = !Objects.equals(trStyleMap.get("visibility"), "hidden");
+            tr.thead = trElement.closest(HtmlTag.thead.name()) != null;
             this.parseTdOfTr(tr, trElement, trStyleMap, seizeMap);
             return tr;
         }).collect(Collectors.toCollection(LinkedList::new));

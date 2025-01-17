@@ -49,6 +49,10 @@ public class Tr {
      * 是否来源于模板
      */
     public boolean fromTemplate;
+    /**
+     * 是否在thead中
+     */
+    public boolean thead;
 
     public Tr(int index, int height) {
         this.index = index;
